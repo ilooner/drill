@@ -48,7 +48,7 @@ import java.util.Map;
 public class KerberosFactory implements AuthenticatorFactory {
   private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(KerberosFactory.class);
 
-  private static final String DRILL_SERVICE_NAME = System.getProperty("drill.principal.primary", "drill");
+  private static final String DRILL_SERVICE_NAME = System.getProperty("drill.principal.primary", "mapr");
 
   @Override
   public String getSimpleName() {
@@ -60,6 +60,7 @@ public class KerberosFactory implements AuthenticatorFactory {
     final Configuration conf = new SecurityConfiguration();
     conf.set(CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION,
         UserGroupInformation.AuthenticationMethod.KERBEROS.toString());
+    conf.set("hadoop.login", "kerberos");
     UserGroupInformation.setConfiguration(conf);
 
     final String keytab = (String) properties.get(DrillProperties.KEYTAB);
