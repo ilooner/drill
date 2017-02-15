@@ -28,16 +28,19 @@
 
 namespace Drill {
 
-const std::string DEFAULT_SERVICE_NAME = "drill";
+const std::string DEFAULT_SERVICE_NAME = "mapr";
 const int PREFERRED_MIN_SSF = 56;
 const std::string SaslAuthenticatorImpl::KERBEROS_SIMPLE_NAME = "kerberos";
 const std::string SaslAuthenticatorImpl::PLAIN_NAME = "plain";
 
-const std::string KERBEROS_SASL_NAME = "gssapi";
+static const std::string KERBEROS_SASL_NAME = "gssapi";
+static const std::string MAPR_SECURITY_SIMPLE_NAME = "maprsasl";
+static const std::string MAPR_SECURITY_SASL_NAME = "mapr-security";
 
 const std::map<std::string, std::string> SaslAuthenticatorImpl::MECHANISM_MAPPING = boost::assign::map_list_of
     (SaslAuthenticatorImpl::KERBEROS_SIMPLE_NAME, KERBEROS_SASL_NAME)
-    (SaslAuthenticatorImpl::PLAIN_NAME, SaslAuthenticatorImpl::PLAIN_NAME)
+    (SaslAuthenticatorImpl::PLAIN_NAME, PLAIN_NAME)
+    (MAPR_SECURITY_SIMPLE_NAME, MAPR_SECURITY_SASL_NAME)
 ;
 
 boost::mutex SaslAuthenticatorImpl::s_mutex;
