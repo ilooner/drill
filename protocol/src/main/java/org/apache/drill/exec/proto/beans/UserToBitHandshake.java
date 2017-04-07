@@ -49,6 +49,7 @@ public final class UserToBitHandshake implements Externalizable, Message<UserToB
     static final Boolean DEFAULT_SUPPORT_COMPLEX_TYPES = new Boolean(false);
     static final Boolean DEFAULT_SUPPORT_TIMEOUT = new Boolean(false);
     static final int DEFAULT_CAPABILITIES_VERSION = 0;
+    static final Boolean DEFAULT_ENABLE_MULTIPLEX = new Boolean(false);
     
     private RpcChannel channel;
     private Boolean supportListening;
@@ -60,6 +61,7 @@ public final class UserToBitHandshake implements Externalizable, Message<UserToB
     private RpcEndpointInfos clientInfos;
     private SaslSupport saslSupport;
     private int capabilitiesVersion = DEFAULT_CAPABILITIES_VERSION;
+    private Boolean enableMultiplex = DEFAULT_ENABLE_MULTIPLEX;
 
     public UserToBitHandshake()
     {
@@ -198,6 +200,19 @@ public final class UserToBitHandshake implements Externalizable, Message<UserToB
         return this;
     }
 
+    // enableMultiplex
+
+    public Boolean getEnableMultiplex()
+    {
+        return enableMultiplex;
+    }
+
+    public UserToBitHandshake setEnableMultiplex(Boolean enableMultiplex)
+    {
+        this.enableMultiplex = enableMultiplex;
+        return this;
+    }
+
     // java serialization
 
     public void readExternal(ObjectInput in) throws IOException
@@ -285,6 +300,9 @@ public final class UserToBitHandshake implements Externalizable, Message<UserToB
                 case 10:
                     message.capabilitiesVersion = input.readInt32();
                     break;
+                case 11:
+                    message.enableMultiplex = input.readBool();
+                    break;
                 default:
                     input.handleUnknownField(number, this);
             }   
@@ -326,6 +344,9 @@ public final class UserToBitHandshake implements Externalizable, Message<UserToB
 
         if(message.capabilitiesVersion != DEFAULT_CAPABILITIES_VERSION)
             output.writeInt32(10, message.capabilitiesVersion, false);
+
+        if(message.enableMultiplex != null && message.enableMultiplex != DEFAULT_ENABLE_MULTIPLEX)
+            output.writeBool(11, message.enableMultiplex, false);
     }
 
     public String getFieldName(int number)
@@ -342,6 +363,7 @@ public final class UserToBitHandshake implements Externalizable, Message<UserToB
             case 8: return "clientInfos";
             case 9: return "saslSupport";
             case 10: return "capabilitiesVersion";
+            case 11: return "enableMultiplex";
             default: return null;
         }
     }
@@ -365,6 +387,7 @@ public final class UserToBitHandshake implements Externalizable, Message<UserToB
         __fieldMap.put("clientInfos", 8);
         __fieldMap.put("saslSupport", 9);
         __fieldMap.put("capabilitiesVersion", 10);
+        __fieldMap.put("enableMultiplex", 11);
     }
     
 }
