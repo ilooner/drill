@@ -116,6 +116,11 @@ public class UserSession implements AutoCloseable {
       return this;
     }
 
+    public Builder withUserProperties(DrillProperties properties) {
+      userSession.properties = properties;
+      return this;
+    }
+
     public Builder setSupportComplexTypes(boolean supportComplexTypes) {
       userSession.supportComplexTypes = supportComplexTypes;
       return this;
@@ -189,6 +194,10 @@ public class UserSession implements AutoCloseable {
     return properties.getProperty(DrillProperties.IMPERSONATION_TARGET);
   }
 
+  public String unsetTargetUserName() {
+    return (String) properties.remove(DrillProperties.IMPERSONATION_TARGET);
+  }
+
   public void incrementQueryCount(final QueryCountIncrementer incrementer) {
     assert incrementer != null;
     queryCount.incrementAndGet();
@@ -196,6 +205,10 @@ public class UserSession implements AutoCloseable {
 
   public int getQueryCount() {
     return queryCount.get();
+  }
+
+  public DrillProperties getProperties() {
+    return properties;
   }
 
   /**

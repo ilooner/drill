@@ -257,6 +257,10 @@ public class UserServer extends BasicServer<RpcType, BitToUserConnection> {
       if (config.getImpersonationManager() != null && targetName != null) {
         config.getImpersonationManager().replaceUserOnSession(targetName, session);
       }
+      if (inbound.hasEnableMultiplex() && inbound.getEnableMultiplex()) {
+        changeHandlerTo(new MultiUserServerRequestHandler(userWorker, config));
+        session.unsetTargetUserName();
+      }
     }
 
     @Override
