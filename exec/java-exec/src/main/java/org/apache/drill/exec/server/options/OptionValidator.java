@@ -106,4 +106,16 @@ public abstract class OptionValidator {
    */
   public abstract Kind getKind();
 
+  /**
+   * Gets the default result option value for this validator.
+   *
+   * @return result default option value
+   */
+  public abstract OptionValue getResultDefault();
+
+  /**
+   * Sets the default result option value for this validator.
+   */
+  public abstract void setResultDefault(OptionValue resultDefault);
+
 }

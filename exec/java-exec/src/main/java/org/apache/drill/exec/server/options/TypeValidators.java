@@ -220,16 +220,19 @@ public class TypeValidators {
   public static abstract class TypeValidator extends OptionValidator {
     private final Kind kind;
     private final OptionValue defaultValue;
+    private  OptionValue resultDefault;
 
     public TypeValidator(final String name, final Kind kind, final OptionValue defValue) {
       this(name, kind, defValue, false);
     }
+
 
     public TypeValidator(final String name, final Kind kind, final OptionValue defValue, final boolean isAdminOption) {
       super(name, isAdminOption);
       checkArgument(defValue.type == OptionType.SYSTEM, "Default value must be SYSTEM type.");
       this.kind = kind;
       this.defaultValue = defValue;
+      this.resultDefault = null;
     }
 
     @Override
@@ -256,5 +259,13 @@ public class TypeValidators {
     public Kind getKind() {
       return kind;
     }
+
+    public OptionValue getResultDefault() { return resultDefault; }
+
+    public void setResultDefault(OptionValue resultDefault) {
+      this.resultDefault = resultDefault;
+    }
+
+
   }
 }

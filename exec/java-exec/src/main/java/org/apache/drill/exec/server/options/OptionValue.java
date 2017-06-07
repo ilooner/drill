@@ -23,6 +23,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Preconditions;
+import org.apache.drill.common.config.DrillConfig;
 import org.apache.drill.exec.store.sys.PersistentStore;
 
 /**
@@ -203,5 +204,21 @@ public class OptionValue implements Comparable<OptionValue> {
   @Override
   public String toString() {
     return "OptionValue [ type=" + type + ", name=" + name + ", value=" + getValue() + " ]";
+  }
+
+  public static OptionValue getConfigvalue(Kind kind, DrillConfig bootConfig, String name) {
+
+    switch (kind) {
+      case BOOLEAN:
+        return OptionValue.createBoolean(OptionType.SYSTEM, name, bootConfig.getBoolean(("drill.options."+name).toString()));
+      case LONG:
+        return OptionValue.createLong(OptionType.SYSTEM, name, bootConfig.getLong(("drill.options."+name).toString()));
+      case STRING:
+        return OptionValue.createString(OptionType.SYSTEM, name, bootConfig.getString(("drill.options."+name).toString()));
+      case DOUBLE:
+        return OptionValue.createDouble(OptionType.SYSTEM, name, bootConfig.getDouble(("drill.options."+name).toString()));
+      default:
+        return null;
+    }
   }
 }

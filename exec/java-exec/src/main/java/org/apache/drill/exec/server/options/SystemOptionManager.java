@@ -26,7 +26,9 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import com.typesafe.config.ConfigException;
 import org.apache.commons.collections.IteratorUtils;
+import org.apache.drill.common.config.DrillConfig;
 import org.apache.drill.common.config.LogicalPlanPersistence;
 import org.apache.drill.common.exceptions.UserException;
 import org.apache.drill.common.map.CaseInsensitiveMap;
@@ -52,6 +54,7 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
   private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(SystemOptionManager.class);
 
   private static final CaseInsensitiveMap<OptionValidator> VALIDATORS;
+  private static CaseInsensitiveMap<OptionValidator> VALIDATORSRESULT;
 
   static {
     final OptionValidator[] validators = new OptionValidator[]{
@@ -186,6 +189,7 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
 
   private final PersistentStoreProvider provider;
 
+  private DrillConfig bootConfig = null;
   /**
    * Persistent store for options that have been changed from default.
    * NOTE: CRUD operations must use lowercase keys.
@@ -194,9 +198,35 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
 
   public SystemOptionManager(LogicalPlanPersistence lpPersistence, final PersistentStoreProvider provider) {
     this.provider = provider;
-    this.config =  PersistentStoreConfig.newJacksonBuilder(lpPersistence.getMapper(), OptionValue.class)
-        .name("sys.options")
-        .build();
+    this.config = PersistentStoreConfig.newJacksonBuilder(lpPersistence.getMapper(), OptionValue.class)
+          .name("sys.options")
+          .build();
+  }
+
+  public SystemOptionManager(LogicalPlanPersistence lpPersistence, final PersistentStoreProvider provider, final DrillConfig bootConfig) {
+    this.provider = provider;
+    this.config = PersistentStoreConfig.newJacksonBuilder(lpPersistence.getMapper(), OptionValue.class)
+          .name("sys.options")
+          .build();
+    this.bootConfig = bootConfig;
+    populateDefualtValues(VALIDATORS);
+  }
+
+  /**
+   * Gets the {@link OptionValidator} associated with the name.
+   *
+   * @param name name of the option
+   * @return the associated validator
+   * @throws UserException - if the validator is not found
+   */
+  public static OptionValidator getValidator(final String name) {
+    final OptionValidator validator = VALIDATORSRESULT.get(name);
+    if (validator == null) {
+      throw UserException.validationError()
+              .message(String.format("The option '%s' does not exist.", name.toLowerCase()))
+              .build(logger);
+    }
+    return validator;
   }
 
   /**
@@ -207,6 +237,7 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
    */
   public SystemOptionManager init() throws Exception {
     options = provider.getOrCreateStore(config);
+
     // if necessary, deprecate and replace options from persistent store
     for (final Entry<String, OptionValue> option : Lists.newArrayList(options.getAll())) {
       final String name = option.getKey();
@@ -229,29 +260,12 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
     return this;
   }
 
-  /**
-   * Gets the {@link OptionValidator} associated with the name.
-   *
-   * @param name name of the option
-   * @return the associated validator
-   * @throws UserException - if the validator is not found
-   */
-  public static OptionValidator getValidator(final String name) {
-    final OptionValidator validator = VALIDATORS.get(name);
-    if (validator == null) {
-      throw UserException.validationError()
-          .message(String.format("The option '%s' does not exist.", name))
-          .build(logger);
-    }
-    return validator;
-  }
-
   @Override
   public Iterator<OptionValue> iterator() {
     final Map<String, OptionValue> buildList = CaseInsensitiveMap.newHashMap();
     // populate the default options
-    for (final Map.Entry<String, OptionValidator> entry : VALIDATORS.entrySet()) {
-      buildList.put(entry.getKey(), entry.getValue().getDefault());
+    for (final Map.Entry<String, OptionValidator> entry : VALIDATORSRESULT.entrySet()) {
+      buildList.put(entry.getKey(), entry.getValue().getResultDefault());
     }
     // override if changed
     for (final Map.Entry<String, OptionValue> entry : Lists.newArrayList(options.getAll())) {
@@ -264,12 +278,22 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
   public OptionValue getOption(final String name) {
     // check local space (persistent store)
     final OptionValue value = options.get(name.toLowerCase());
+    OptionValue val;
+
+
     if (value != null) {
       return value;
     }
 
     // otherwise, return default.
     final OptionValidator validator = getValidator(name);
+
+    if (validator.getResultDefault() != null) {
+      if (!validator.getResultDefault().getValue().equals(validator.getDefault().getValue())) {
+//                System.out.println("Def and res" + "\t" + validator.getResultDefault().getValue() +"\t" +validator.getDefault().getValue());
+      }
+      return validator.getResultDefault();
+    }
     return validator.getDefault();
   }
 
@@ -280,7 +304,6 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
     final OptionValidator validator = getValidator(name);
 
     validator.validate(value, this); // validate the option
-
     if (options.get(name) == null && value.equals(validator.getDefault())) {
       return; // if the option is not overridden, ignore setting option to default
     }
@@ -304,6 +327,29 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
     }
     for (final String name : names) {
       options.delete(name); // should be lowercase
+    }
+  }
+
+  public void populateDefualtValues(Map<String, OptionValidator> VALIDATORS) {
+
+    // populate the options from the config
+    final Map<String, OptionValidator> tmp = new HashMap<>();
+    for (final Map.Entry<String, OptionValidator> entry : VALIDATORS.entrySet()) {
+
+      OptionValidator validator = entry.getValue();
+      final OptionValue.Kind kind = validator.getKind();
+      String name = entry.getKey();
+      OptionValue value;
+      try {
+        value = OptionValue.getConfigvalue(kind, bootConfig, name);
+        validator.setResultDefault(value);
+        tmp.put(name, validator);
+      } catch (ConfigException.Missing e) {
+        logger.error(e.getMessage(), e);
+        validator.setResultDefault(validator.getDefault());
+        tmp.put(name, validator);
+      }
+      VALIDATORSRESULT = CaseInsensitiveMap.newImmutableMap(tmp);
     }
   }
 
