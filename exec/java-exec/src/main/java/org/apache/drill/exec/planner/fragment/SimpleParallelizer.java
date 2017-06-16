@@ -72,7 +72,9 @@ public class SimpleParallelizer implements ParallelizationParameters {
     OptionManager optionManager = context.getOptions();
     long sliceTarget = optionManager.getOption(ExecConstants.SLICE_TARGET).num_val;
     this.parallelizationThreshold = sliceTarget > 0 ? sliceTarget : 1;
-    this.maxWidthPerNode = optionManager.getOption(ExecConstants.MAX_WIDTH_PER_NODE_KEY).num_val.intValue();
+    long maxWidth = optionManager.getOption(ExecConstants.MAX_WIDTH_PER_NODE_KEY).num_val.intValue();
+    Double cpu_load_average = optionManager.getOption(ExecConstants.CPU_LOAD_AVERAGE_KEY).float_val;
+    this.maxWidthPerNode = (int) (maxWidth != 0 ? maxWidth : (long) Math.ceil(Runtime.getRuntime().availableProcessors() * cpu_load_average));
     this.maxGlobalWidth = optionManager.getOption(ExecConstants.MAX_WIDTH_GLOBAL_KEY).num_val.intValue();
     this.affinityFactor = optionManager.getOption(ExecConstants.AFFINITY_FACTOR_KEY).float_val.intValue();
   }

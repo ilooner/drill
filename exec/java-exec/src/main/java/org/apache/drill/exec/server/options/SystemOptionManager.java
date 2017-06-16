@@ -53,8 +53,8 @@ import com.google.common.collect.Sets;
 public class SystemOptionManager extends BaseOptionManager implements OptionManager, AutoCloseable {
   private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(SystemOptionManager.class);
 
-  private static final CaseInsensitiveMap<OptionValidator> VALIDATORS;
-  private static CaseInsensitiveMap<OptionValidator> VALIDATORSRESULT;
+  private static CaseInsensitiveMap<OptionValidator> VALIDATORS;
+//  private static CaseInsensitiveMap<OptionValidator> VALIDATORS;
 
   static {
     final OptionValidator[] validators = new OptionValidator[]{
@@ -173,7 +173,8 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
       ExecConstants.QUERY_PROFILE_DEBUG_VALIDATOR,
       ExecConstants.USE_DYNAMIC_UDFS,
       ExecConstants.QUERY_TRANSIENT_STATE_UPDATE,
-      ExecConstants.PERSISTENT_TABLE_UMASK_VALIDATOR
+      ExecConstants.PERSISTENT_TABLE_UMASK_VALIDATOR,
+      ExecConstants.CPU_LOAD_AVERAGE
     };
     final Map<String, OptionValidator> tmp = new HashMap<>();
     for (final OptionValidator validator : validators) {
@@ -220,7 +221,7 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
    * @throws UserException - if the validator is not found
    */
   public static OptionValidator getValidator(final String name) {
-    final OptionValidator validator = VALIDATORSRESULT.get(name);
+    final OptionValidator validator = VALIDATORS.get(name);
     if (validator == null) {
       throw UserException.validationError()
               .message(String.format("The option '%s' does not exist.", name.toLowerCase()))
@@ -264,7 +265,7 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
   public Iterator<OptionValue> iterator() {
     final Map<String, OptionValue> buildList = CaseInsensitiveMap.newHashMap();
     // populate the default options
-    for (final Map.Entry<String, OptionValidator> entry : VALIDATORSRESULT.entrySet()) {
+    for (final Map.Entry<String, OptionValidator> entry : VALIDATORS.entrySet()) {
       buildList.put(entry.getKey(), entry.getValue().getResultDefault());
     }
     // override if changed
@@ -290,7 +291,8 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
 
     if (validator.getResultDefault() != null) {
       if (!validator.getResultDefault().getValue().equals(validator.getDefault().getValue())) {
-//                System.out.println("Def and res" + "\t" + validator.getResultDefault().getValue() +"\t" +validator.getDefault().getValue());
+                System.out.println("Config and hardcoded values are" + "\t" + validator.getResultDefault().getValue()
+                        +"\t" +validator.getDefault().getValue());
       }
       return validator.getResultDefault();
     }
@@ -330,15 +332,16 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
     }
   }
 
-  public void populateDefualtValues(Map<String, OptionValidator> VALIDATORS) {
+  public void populateDefualtValues(Map<String, OptionValidator> VALIDATORSRESULT) {
 
     // populate the options from the config
     final Map<String, OptionValidator> tmp = new HashMap<>();
-    for (final Map.Entry<String, OptionValidator> entry : VALIDATORS.entrySet()) {
+//    System.out.println(bootConfig);
+    for (final Map.Entry<String, OptionValidator> entry : VALIDATORSRESULT.entrySet()) {
 
       OptionValidator validator = entry.getValue();
       final OptionValue.Kind kind = validator.getKind();
-      String name = entry.getKey();
+      String name = entry.getValue().getOptionName();
       OptionValue value;
       try {
         value = OptionValue.getConfigvalue(kind, bootConfig, name);
@@ -349,7 +352,7 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
         validator.setResultDefault(validator.getDefault());
         tmp.put(name, validator);
       }
-      VALIDATORSRESULT = CaseInsensitiveMap.newImmutableMap(tmp);
+      VALIDATORS = CaseInsensitiveMap.newImmutableMap(tmp);
     }
   }
 

@@ -283,8 +283,10 @@ public interface ExecConstants {
   /**
    * Limits the maximum level of parallelization to this factor time the number of Drillbits
    */
+  String CPU_LOAD_AVERAGE_KEY = "planner.cpu_load_average";
+  OptionValidator CPU_LOAD_AVERAGE = new DoubleValidator(CPU_LOAD_AVERAGE_KEY,0.7);
   String MAX_WIDTH_PER_NODE_KEY = "planner.width.max_per_node";
-  OptionValidator MAX_WIDTH_PER_NODE = new PositiveLongValidator(MAX_WIDTH_PER_NODE_KEY, Integer.MAX_VALUE, (long) Math.ceil(Runtime.getRuntime().availableProcessors() * 0.70));
+  OptionValidator MAX_WIDTH_PER_NODE = new PositiveLongValidator(MAX_WIDTH_PER_NODE_KEY, Integer.MAX_VALUE, (long) Math.ceil(Runtime.getRuntime().availableProcessors() * 0.7));
 
   /**
    * The maximum level or parallelization any stage of the query can do. Note that while this

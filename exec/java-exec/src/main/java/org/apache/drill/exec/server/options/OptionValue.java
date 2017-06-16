@@ -36,7 +36,7 @@ import org.apache.drill.exec.store.sys.PersistentStore;
 public class OptionValue implements Comparable<OptionValue> {
 
   public enum OptionType {
-    BOOT, SYSTEM, SESSION, QUERY
+    BOOT, SYSTEM, SESSION, QUERY, DEFAULT
   }
 
   public enum Kind {
@@ -207,16 +207,16 @@ public class OptionValue implements Comparable<OptionValue> {
   }
 
   public static OptionValue getConfigvalue(Kind kind, DrillConfig bootConfig, String name) {
-
+    String ConfigPath = "drill.exec.options.";
     switch (kind) {
       case BOOLEAN:
-        return OptionValue.createBoolean(OptionType.SYSTEM, name, bootConfig.getBoolean(("drill.options."+name).toString()));
+        return OptionValue.createBoolean(OptionType.DEFAULT, name, bootConfig.getBoolean((ConfigPath+name).toString()));
       case LONG:
-        return OptionValue.createLong(OptionType.SYSTEM, name, bootConfig.getLong(("drill.options."+name).toString()));
+        return OptionValue.createLong(OptionType.DEFAULT, name, bootConfig.getLong((ConfigPath+name).toString()));
       case STRING:
-        return OptionValue.createString(OptionType.SYSTEM, name, bootConfig.getString(("drill.options."+name).toString()));
+        return OptionValue.createString(OptionType.DEFAULT, name, bootConfig.getString((ConfigPath+name).toString()));
       case DOUBLE:
-        return OptionValue.createDouble(OptionType.SYSTEM, name, bootConfig.getDouble(("drill.options."+name).toString()));
+        return OptionValue.createDouble(OptionType.DEFAULT, name, bootConfig.getDouble((ConfigPath+name).toString()));
       default:
         return null;
     }
