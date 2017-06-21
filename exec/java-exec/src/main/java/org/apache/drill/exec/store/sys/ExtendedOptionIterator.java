@@ -17,9 +17,7 @@
  */
 package org.apache.drill.exec.store.sys;
 
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -31,54 +29,59 @@ import org.apache.drill.exec.server.options.OptionValue.Kind;
 import org.apache.drill.exec.server.options.OptionValue.OptionType;
 import org.apache.drill.exec.server.options.SystemOptionManager;
 
-public class OptionsIterator implements Iterator<Object> {
+public class ExtendedOptionIterator implements Iterator<Object> {
 //  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(OptionIterator.class);
-
-  enum Mode {
-    BOOT, SYS_SESS, BOTH ,NEW_OPTIONS
-  };
 
   private final OptionManager fragmentOptions;
   private final Iterator<OptionValue> mergedOptions;
 
-  public OptionsIterator(FragmentContext context, Mode mode){
-    final DrillConfigIterator configOptions = new DrillConfigIterator(context.getConfig());
+  public ExtendedOptionIterator(FragmentContext context) {
     fragmentOptions = context.getOptions();
     final Iterator<OptionValue> optionList;
-    optionList = sortOptions(fragmentOptions.iterator());
-    List<OptionValue> values = Lists.newArrayList(optionList);
-    System.out.println(values);
-    Collections.sort(values);
-    System.out.println(values);
-    System.out.println(values.get(0).getValue());
-    mergedOptions = values.iterator();
-
+    mergedOptions = sortOptions(fragmentOptions.iterator());
   }
-
-
   public Iterator<OptionValue> sortOptions(Iterator<OptionValue> options)
   {
-    System.out.println(options);
     List<OptionValue> values = Lists.newArrayList(options);
-    Collections.sort(values);
-    for (int i = 1; i < values.size(); i++ )
-    {
-      OptionValue current = values.get(i);
-      OptionValue previous = values.get(i-1);
+    List<OptionValue> optionValues = new ArrayList<OptionValue>();
+    OptionValue temp = null;
+    OptionValue value;
 
-      if(current.name.equals(previous.name)) {
-        if(current.type == OptionType.SESSION) {
-          values.remove(i - 1);
+    Collections.sort(values,  new Comparator<OptionValue>() {
+      @Override
+      public int compare(OptionValue v1, OptionValue v2) {
+        int nameCmp = v1.name.compareTo(v2.name);
+        if (nameCmp != 0) {
+          return nameCmp;
+        }
+        return v1.type.compareTo( v2.type);
       }
-      else if(current.type == OptionType.SYSTEM && previous.type == OptionType.DEFAULT) {
-          values.remove(i - 1);
+    });
+
+    for (int i = 0; i < values.size() ;i++ )
+    {
+      value = values.get(i);
+      OptionType type = value.type ;
+      switch (type) {
+        case DEFAULT:
+          temp = value;
+          break;
+        case SESSION:
+          temp = value;
+          break;
+        case SYSTEM:
+          if(!temp.getName().equals(value.getName()))
+            temp = value ;
+          else if (temp.getName().equals(value.getName()) && temp.type.equals(OptionType.DEFAULT))
+            temp = value;
+          break;
       }
-      else {
-          values.remove(i);
+      if(i == values.size() - 1 || (i < values.size()  && !temp.getName().equals(values.get(i+1).getName()) ) ) {
+        optionValues.add(temp);
       }
-      }
+
     }
-    return values.iterator();
+    return optionValues.iterator();
   }
 
   @Override
@@ -87,20 +90,20 @@ public class OptionsIterator implements Iterator<Object> {
   }
 
   @Override
-  public ResultObjectWrapper next() {
+  public ExtendedOptionValueWrapper next() {
     final OptionValue value = mergedOptions.next();
     final Status status;
     if (value.type == OptionType.BOOT) {
       status = Status.BOOT;
     } else {
-      final OptionValue def = SystemOptionManager.getValidator(value.name).getResultDefault();
+      final OptionValue def = SystemOptionManager.getValidator(value.name).getDefault();
       if (value.equalsIgnoreType(def)) {
         status = Status.DEFAULT;
         } else {
         status = Status.CHANGED;
         }
       }
-    return new ResultObjectWrapper(value.name, value.kind, value.type,value.getValue().toString(), status);
+    return new ExtendedOptionValueWrapper(value.name, value.kind, value.type,value.getValue().toString(), status);
   }
 
   public static enum Status {
@@ -110,22 +113,20 @@ public class OptionsIterator implements Iterator<Object> {
   /**
    * Wrapper class for OptionValue to add Status
    */
-  public static class ResultObjectWrapper {
+  public static class ExtendedOptionValueWrapper {
 
     public final String name;
     public final Kind kind;
     public final OptionType type;
-    public final Status status;
     public final String string_value;
 
 
-    public ResultObjectWrapper(final String name, final Kind kind, final OptionType type, final String value,
+    public ExtendedOptionValueWrapper(final String name, final Kind kind, final OptionType type, final String value,
         final Status status) {
       this.name = name;
       this.kind = kind;
       this.type = type;
       this.string_value = value;
-      this.status = status;
     }
   }
 

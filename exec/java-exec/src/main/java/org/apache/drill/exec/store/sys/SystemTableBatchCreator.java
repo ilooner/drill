@@ -45,7 +45,6 @@ public class SystemTableBatchCreator implements BatchCreator<SystemTableScan> {
     final SystemTable table = scan.getTable();
     final Iterator<Object> iterator = table.getIterator(context);
     final RecordReader reader = new PojoRecordReader(table.getPojoClass(), iterator);
-
     return new ScanBatch(scan, context, Collections.singleton(reader).iterator());
   }
 }

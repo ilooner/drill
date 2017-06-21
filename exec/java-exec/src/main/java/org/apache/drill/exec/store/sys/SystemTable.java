@@ -21,7 +21,7 @@ import java.util.Iterator;
 
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.store.sys.OptionIterator.OptionValueWrapper;
-import org.apache.drill.exec.store.sys.OptionsIterator.ResultObjectWrapper;
+import org.apache.drill.exec.store.sys.ExtendedOptionIterator.ExtendedOptionValueWrapper;
 
 
 /**
@@ -41,10 +41,10 @@ public enum SystemTable {
     }
   },
 
-  OPTION2("options2", false,OptionsIterator.ResultObjectWrapper.class ) {
+  OPTION2("options2", false,ExtendedOptionIterator.ExtendedOptionValueWrapper.class ) {
     @Override
     public Iterator<Object> getIterator(final FragmentContext context) {
-      return new OptionsIterator(context, OptionsIterator.Mode.NEW_OPTIONS);
+      return new ExtendedOptionIterator(context);
     }
 
   },

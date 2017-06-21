@@ -26,67 +26,50 @@ import static org.junit.Assert.assertEquals;
 public class TestConfigLinkage {
   public static final String AFFINITY_FACTOR = "drill.exec.work.affinity.factor";
 
+  /* Test if session option takes precendence */
   @Test
-  public void firstTest() throws Exception {
-    FixtureBuilder builder = ClusterFixture.builder().systemOption(ExecConstants.SLICE_TARGET, 10);
+  public void testSessionOption() throws Exception {
+    FixtureBuilder builder = ClusterFixture.builder().sessionOption(ExecConstants.SLICE_TARGET, 10);
     try (ClusterFixture cluster = builder.build();
          ClientFixture client = cluster.clientFixture()) {
-      client.queryBuilder().sql("ALTER SYSTEM SET `planner.affinity_factor` = 1.5").run();
       String slice_target = client.queryBuilder().sql("SELECT string_value FROM sys.options2 where name='planner.slice_target'").singletonString();
       assertEquals(slice_target,"10");
     }
   }
 
+  /* Test if system option takes precendence */
   @Test
-  public void secondTest() throws Exception {
+  public void testSystemOption() throws Exception {
+    FixtureBuilder builder = ClusterFixture.builder().systemOption(ExecConstants.SLICE_TARGET, 20);
+    try (ClusterFixture cluster = builder.build();
+         ClientFixture client = cluster.clientFixture()) {
+      String slice_target = client.queryBuilder().sql("SELECT string_value FROM sys.options2 where name='planner.slice_target'").singletonString();
+      assertEquals(slice_target,"20");
+    }
+  }
+
+  /* Test if config option takes precedence if config option is not set */
+  @Test
+  public void testConfigOption() throws Exception {
     FixtureBuilder builder = ClusterFixture.builder()
             .configProperty("drill.exec.options."+ExecConstants.SLICE_TARGET, 30);
     try (ClusterFixture cluster = builder.build();
          ClientFixture client = cluster.clientFixture()) {
       String slice_target = client.queryBuilder().sql("SELECT string_value FROM sys.options2 where name='planner.slice_target'").singletonString();
       assertEquals(slice_target,"30");
-      client.queryBuilder().sql("SELECT * FROM sys.options2").printCsv();
     }
   }
 
+  /* Test if altering system option takes precedence over config option */
   @Test
-  public void test() throws Exception {
+  public void testAlterSystem() throws Exception {
     try (ClusterFixture cluster = ClusterFixture.standardCluster();
          ClientFixture client = cluster.clientFixture()) {
       client.queryBuilder().sql("ALTER SYSTEM SET `planner.affinity_factor` = 1.5").run();
       client.queryBuilder().sql("SELECT * FROM sys.options2").printCsv();
-
+      String affinity_factor = client.queryBuilder().sql("SELECT string_value FROM sys.options2 where name='planner.affinity_factor'").singletonString();
+      assertEquals(affinity_factor,"1.5");
     }
   }
-
-  @Test
-  public void testConfig() throws Exception {
-
-
-    try (ClusterFixture cluster = ClusterFixture.standardCluster();
-         ClientFixture client = cluster.clientFixture()) {
-      DrillConfig config = client.cluster().config();
-      System.out.println(config.getString(AFFINITY_FACTOR));
-
-    } catch (Exception e) {
-      System.out.println("Option does not exist in config");
-    }
-  }
-
-
-
-  @Test
-  public void testSystemOption() throws Exception {
-    FixtureBuilder builder = ClusterFixture.builder().systemOption(ExecConstants.AFFINITY_FACTOR_KEY, 1.9);
-    try (ClusterFixture cluster = builder.build();
-         ClientFixture client = cluster.clientFixture()) {
-
-      DrillConfig config = cluster.config();
-      client.queryBuilder().sql("SELECT * FROM sys.options2 ").printCsv();
-    }
-  }
-
-
-
 
 }

@@ -50,12 +50,16 @@ import com.google.common.collect.Sets;
  * Only one instance of this class exists per drillbit. Options set at the system level affect the entire system and
  * persist between restarts.
  */
+
+/**
+ *  The options in drill work in a hierarchical manner.The session options takes precendence over system and system over config.
+ *  The main aim of SystemOptionManager is to get the option values from the config and get rid of the hardcoded values for the option values in the validators.
+ *
+ */
 public class SystemOptionManager extends BaseOptionManager implements OptionManager, AutoCloseable {
   private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(SystemOptionManager.class);
 
   private static CaseInsensitiveMap<OptionValidator> VALIDATORS;
-//  private static CaseInsensitiveMap<OptionValidator> VALIDATORS;
-
   static {
     final OptionValidator[] validators = new OptionValidator[]{
       PlannerSettings.CONSTANT_FOLDING,
@@ -266,7 +270,7 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
     final Map<String, OptionValue> buildList = CaseInsensitiveMap.newHashMap();
     // populate the default options
     for (final Map.Entry<String, OptionValidator> entry : VALIDATORS.entrySet()) {
-      buildList.put(entry.getKey(), entry.getValue().getResultDefault());
+      buildList.put(entry.getKey(), entry.getValue().getDefault());
     }
     // override if changed
     for (final Map.Entry<String, OptionValue> entry : Lists.newArrayList(options.getAll())) {
@@ -289,12 +293,12 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
     // otherwise, return default.
     final OptionValidator validator = getValidator(name);
 
-    if (validator.getResultDefault() != null) {
-      if (!validator.getResultDefault().getValue().equals(validator.getDefault().getValue())) {
-                System.out.println("Config and hardcoded values are" + "\t" + validator.getResultDefault().getValue()
+    if (validator.getDefault() != null) {
+      if (!validator.getDefault().getValue().equals(validator.getDefault().getValue())) {
+                System.out.println("Config and hardcoded values are" + "\t" + validator.getDefault().getValue()
                         +"\t" +validator.getDefault().getValue());
       }
-      return validator.getResultDefault();
+      return validator.getDefault();
     }
     return validator.getDefault();
   }
@@ -343,13 +347,15 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
       final OptionValue.Kind kind = validator.getKind();
       String name = entry.getValue().getOptionName();
       OptionValue value;
+      String configPath = "drill.exec.options.";
+      String configName = configPath + name;
       try {
-        value = OptionValue.getConfigvalue(kind, bootConfig, name);
-        validator.setResultDefault(value);
+        value = validator.loadConfigDefault(bootConfig,name,configPath);
+        validator.setDefaultValue(value);
         tmp.put(name, validator);
       } catch (ConfigException.Missing e) {
         logger.error(e.getMessage(), e);
-        validator.setResultDefault(validator.getDefault());
+        validator.setDefaultValue(validator.getDefault());
         tmp.put(name, validator);
       }
       VALIDATORS = CaseInsensitiveMap.newImmutableMap(tmp);
