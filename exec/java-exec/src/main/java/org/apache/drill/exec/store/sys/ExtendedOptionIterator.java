@@ -17,12 +17,13 @@
  */
 package org.apache.drill.exec.store.sys;
 
-import java.util.*;
-
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Comparator;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import org.apache.drill.exec.ops.FragmentContext;
-import org.apache.drill.exec.server.options.DrillConfigIterator;
 import org.apache.drill.exec.server.options.OptionManager;
 import org.apache.drill.exec.server.options.OptionValue;
 import org.apache.drill.exec.server.options.OptionValue.Kind;
@@ -43,7 +44,7 @@ public class ExtendedOptionIterator implements Iterator<Object> {
   public Iterator<OptionValue> sortOptions(Iterator<OptionValue> options)
   {
     List<OptionValue> values = Lists.newArrayList(options);
-    List<OptionValue> optionValues = new ArrayList<OptionValue>();
+    List<OptionValue> optionValues = Lists.newArrayList();
     OptionValue temp = null;
     OptionValue value;
 
@@ -70,10 +71,12 @@ public class ExtendedOptionIterator implements Iterator<Object> {
           temp = value;
           break;
         case SYSTEM:
-          if(!temp.getName().equals(value.getName()))
-            temp = value ;
-          else if (temp.getName().equals(value.getName()) && temp.type.equals(OptionType.DEFAULT))
+          if(!temp.getName().equals(value.getName())) {
             temp = value;
+          }
+          else if (temp.getName().equals(value.getName()) && temp.type.equals(OptionType.DEFAULT)) {
+            temp = value;
+          }
           break;
       }
       if(i == values.size() - 1 || (i < values.size()  && !temp.getName().equals(values.get(i+1).getName()) ) ) {

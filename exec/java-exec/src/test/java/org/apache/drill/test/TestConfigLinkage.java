@@ -23,6 +23,7 @@ import org.junit.Test;
 import org.apache.drill.common.config.DrillConfig;
 import static org.junit.Assert.assertEquals;
 
+/* Tests to assert if the config options are getting read in the order of session ,system, config */
 public class TestConfigLinkage {
   public static final String AFFINITY_FACTOR = "drill.exec.work.affinity.factor";
 
