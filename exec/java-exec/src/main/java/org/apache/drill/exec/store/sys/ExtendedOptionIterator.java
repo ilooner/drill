@@ -29,7 +29,12 @@ import org.apache.drill.exec.server.options.OptionValue;
 import org.apache.drill.exec.server.options.OptionValue.Kind;
 import org.apache.drill.exec.server.options.OptionValue.OptionType;
 import org.apache.drill.exec.server.options.SystemOptionManager;
-
+/*
+ * To extend the original Option iterator to hide the implementation details and to return the row
+ * which takes precedence over others for an option.This is done by examining the type as the precendence
+ * order is session - system - default.All the values are represented as String instead of having multiple
+ * columns and the datatype is provided for type details.
+ */
 public class ExtendedOptionIterator implements Iterator<Object> {
 //  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(OptionIterator.class);
 
@@ -41,12 +46,17 @@ public class ExtendedOptionIterator implements Iterator<Object> {
     final Iterator<OptionValue> optionList;
     mergedOptions = sortOptions(fragmentOptions.iterator());
   }
+  /*
+    Sort options according to name and the type to remove the redundant rows
+    for the same option based on the type
+   */
   public Iterator<OptionValue> sortOptions(Iterator<OptionValue> options)
   {
     List<OptionValue> values = Lists.newArrayList(options);
     List<OptionValue> optionValues = Lists.newArrayList();
     OptionValue temp = null;
     OptionValue value;
+    OptionType type;
 
     Collections.sort(values,  new Comparator<OptionValue>() {
       @Override
@@ -62,7 +72,7 @@ public class ExtendedOptionIterator implements Iterator<Object> {
     for (int i = 0; i < values.size() ;i++ )
     {
       value = values.get(i);
-      OptionType type = value.type ;
+      type = value.type ;
       switch (type) {
         case DEFAULT:
           temp = value;
@@ -95,18 +105,7 @@ public class ExtendedOptionIterator implements Iterator<Object> {
   @Override
   public ExtendedOptionValueWrapper next() {
     final OptionValue value = mergedOptions.next();
-    final Status status;
-    if (value.type == OptionType.BOOT) {
-      status = Status.BOOT;
-    } else {
-      final OptionValue def = SystemOptionManager.getValidator(value.name).getDefault();
-      if (value.equalsIgnoreType(def)) {
-        status = Status.DEFAULT;
-        } else {
-        status = Status.CHANGED;
-        }
-      }
-    return new ExtendedOptionValueWrapper(value.name, value.kind, value.type,value.getValue().toString(), status);
+    return new ExtendedOptionValueWrapper(value.name, value.kind, value.type,value.getValue().toString());
   }
 
   public static enum Status {
@@ -114,7 +113,7 @@ public class ExtendedOptionIterator implements Iterator<Object> {
   }
 
   /**
-   * Wrapper class for OptionValue to add Status
+   * Wrapper class for Extended Option Value
    */
   public static class ExtendedOptionValueWrapper {
 
@@ -124,8 +123,7 @@ public class ExtendedOptionIterator implements Iterator<Object> {
     public final String string_value;
 
 
-    public ExtendedOptionValueWrapper(final String name, final Kind kind, final OptionType type, final String value,
-        final Status status) {
+    public ExtendedOptionValueWrapper(final String name, final Kind kind, final OptionType type, final String value) {
       this.name = name;
       this.kind = kind;
       this.type = type;

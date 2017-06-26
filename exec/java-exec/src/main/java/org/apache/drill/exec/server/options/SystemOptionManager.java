@@ -52,8 +52,38 @@ import com.google.common.collect.Sets;
  */
 
 /**
- *  The options in drill work in a hierarchical manner.The session options takes precendence over system and system over config.
- *  The main aim of SystemOptionManager is to get the option values from the config and get rid of the hardcoded values for the option values in the validators.
+ *  Drill has two different config systems each with its own name space.First being the HOCON based boot time config
+ *  system.This is a hierarchial system where the top layers override the bottom ones in the following order
+ *
+ *  Java System Options
+ *  distrib.conf
+ *  drill-override.conf
+ *  drill-module.conf
+ *
+ *  These are the options that are set before the dril starts.But once drill starts System or session options can
+ *  be modified using ALTER SYSTEM/SESSION.Even this system provides inheritance sytle in following order
+ *
+ *  Session options
+ *  System pptions
+ *  Hardcoded defaults
+ *
+ *  But system/session options have a validator and the validator has a hard coded default value for every option. In
+ *  the current system validators are registered so that system/session options will always have a default value.
+ *  So when a system/session options is not explicitly set or an uset system/session option is null the hardcoded
+ *  default was applied since it checks if the option value is null and returns the default set in the validator.But
+ *  the config options set during boot time are never read and honored since there is no linkage between the two
+ *  config systems.It is also evident that there are some places where there is some ad-hoc linkage between the
+ *  two systems.For example, for the code gen compiler,config options are supposed to be read if the system option
+ *  is not null.But as the validator provides the default values config options are never taken into consideration.
+ *
+ *  The goal of the new system is to link both the systems in such a way that boot-time config options take precendence
+ *  over the hard coded defaults set in the validator.All the options in teh option validator i.e.c options from
+ *  Exec constants,planner settings etc., are extracted and put under a new name space called drill.exec.options
+ *  in the .conf file.
+ *  The default values of the validators in the option validator are populated with the values in the boot-config.This way
+ *  the values set in the boot time config system are honored.Any user who wish to change the option values in the
+ *  config should change the options under the name space drill.exec.options
+ *
  *
  */
 public class SystemOptionManager extends BaseOptionManager implements OptionManager, AutoCloseable {
@@ -290,17 +320,10 @@ public class SystemOptionManager extends BaseOptionManager implements OptionMana
       return value;
     }
 
-    // otherwise, return default.
+    // otherwise, return default set in the validator.
     final OptionValidator validator = getValidator(name);
-
-    if (validator.getDefault() != null) {
-      if (!validator.getDefault().getValue().equals(validator.getDefault().getValue())) {
-                System.out.println("Config and hardcoded values are" + "\t" + validator.getDefault().getValue()
-                        +"\t" +validator.getDefault().getValue());
-      }
-      return validator.getDefault();
-    }
     return validator.getDefault();
+
   }
 
   @Override

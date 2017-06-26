@@ -22,10 +22,12 @@ import org.apache.drill.exec.ExecConstants;
 import org.junit.Test;
 import org.apache.drill.common.config.DrillConfig;
 import static org.junit.Assert.assertEquals;
-
-/* Tests to assert if the config options are getting read in the order of session ,system, config */
+/*
+ * Tests to test if the linkage between the two config option systems
+ * i.e., the linkage between boot-config system and system/session options
+ */
+/* Tests to assert if the config options are read in the order of session ,system, boot-config */
 public class TestConfigLinkage {
-  public static final String AFFINITY_FACTOR = "drill.exec.work.affinity.factor";
 
   /* Test if session option takes precendence */
   @Test
