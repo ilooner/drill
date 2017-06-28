@@ -18,9 +18,11 @@
 package org.apache.drill.exec.store.sys;
 
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Comparator;
+import java.util.Arrays;
+
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import org.apache.drill.exec.ops.FragmentContext;
@@ -54,9 +56,10 @@ public class ExtendedOptionIterator implements Iterator<Object> {
   {
     List<OptionValue> values = Lists.newArrayList(options);
     List<OptionValue> optionValues = Lists.newArrayList();
-    OptionValue temp = null;
+//    OptionValue temp = null;
     OptionValue value;
     OptionType type;
+    OptionValue[] temp = new OptionValue[3];
 
     Collections.sort(values,  new Comparator<OptionValue>() {
       @Override
@@ -75,23 +78,23 @@ public class ExtendedOptionIterator implements Iterator<Object> {
       type = value.type ;
       switch (type) {
         case DEFAULT:
-          temp = value;
-          break;
-        case SESSION:
-          temp = value;
+          temp[2] = value;
           break;
         case SYSTEM:
-          if(!temp.getName().equals(value.getName())) {
-            temp = value;
-          }
-          else if (temp.getName().equals(value.getName()) && temp.type.equals(OptionType.DEFAULT)) {
-            temp = value;
-          }
+          temp[1] = value;
+        case SESSION:
+          temp[0] = value;
           break;
       }
-      if(i == values.size() - 1 || (i < values.size()  && !temp.getName().equals(values.get(i+1).getName()) ) ) {
-        optionValues.add(temp);
-      }
+      if(i == values.size() - 1 || (i < values.size()  && !value.getName().equals(values.get(i+1).getName()))) {
+        int j = 0;
+        while (temp[j] == null) {
+          j++;
+        }
+        optionValues.add(temp[j]);
+        Arrays.fill(temp,null);
+
+        }
 
     }
     return optionValues.iterator();
@@ -108,7 +111,7 @@ public class ExtendedOptionIterator implements Iterator<Object> {
     return new ExtendedOptionValueWrapper(value.name, value.kind, value.type,value.getValue().toString());
   }
 
-  public static enum Status {
+  public enum Status {
     BOOT, DEFAULT, CHANGED
   }
 
