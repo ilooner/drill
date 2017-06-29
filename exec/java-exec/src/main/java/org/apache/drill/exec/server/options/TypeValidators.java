@@ -142,7 +142,7 @@ public class TypeValidators {
     }
 
     public OptionValue loadConfigDefault(DrillConfig bootConfig, String name, String configPath){
-      return OptionValue.createBoolean(OptionType.DEFAULT, name, bootConfig.getBoolean(configPath+name));
+      return OptionValue.createBoolean(OptionType.SYSTEM, name, bootConfig.getBoolean(configPath+name));
     }
   }
 
@@ -156,7 +156,7 @@ public class TypeValidators {
     }
 
     public OptionValue loadConfigDefault(DrillConfig bootConfig, String name, String configPath){
-      return OptionValue.createString(OptionType.DEFAULT, name, bootConfig.getString(configPath+name));
+      return OptionValue.createString(OptionType.SYSTEM, name, bootConfig.getString(configPath+name));
     }
   }
 
@@ -170,7 +170,7 @@ public class TypeValidators {
     }
 
     public OptionValue loadConfigDefault(DrillConfig bootConfig, String name, String configPath){
-      return OptionValue.createLong(OptionType.DEFAULT, name, bootConfig.getLong(configPath+name));
+      return OptionValue.createLong(OptionType.SYSTEM, name, bootConfig.getLong(configPath+name));
     }
   }
 
@@ -184,7 +184,7 @@ public class TypeValidators {
     }
 
     public OptionValue loadConfigDefault(DrillConfig bootConfig, String name, String configPath){
-      return OptionValue.createDouble(OptionType.DEFAULT, name, bootConfig.getDouble(configPath+name));
+      return OptionValue.createDouble(OptionType.SYSTEM, name, bootConfig.getDouble(configPath+name));
     }
   }
 
