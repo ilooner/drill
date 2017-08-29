@@ -16,5 +16,7 @@
 sudo: false
 before_install: git fetch --unshallow
 language: java
-install: mvn install --batch-mode -DskipTests=true -Dmaven.javadoc.skip=true -Dsource.skip=true > mvn_install.log || (cat mvn_install.log && false)
-script: mvn package -DskipTests=true
+jdk:
+  - openjdk
+install: MAVEN_OPTS="-Xms1G -Xmx1G" mvn -T 2C install --batch-mode -DskipTests=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true
+script: MAVEN_OPTS="-Xms1G -Xmx1G" mvn -T 2C test --batch-mode -Dmaven.javadoc.skip=true
