@@ -18,5 +18,5 @@ before_install: git fetch --unshallow
 language: java
 jdk:
   - openjdk7
-install: MAVEN_OPTS="-Xms1G -Xmx1G" mvn -T 2C install --batch-mode -DskipTests=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true
-script: MAVEN_OPTS="-Xms1G -Xmx1G" mvn -T 2C install --batch-mode -Dmaven.javadoc.skip=true
+install: MAVEN_OPTS="-Xms1G -Xmx1G" mvn -T 2C install --batch-mode -DskipTests=true -Dmaven.javadoc.skip=true -Dmaven.source.skip=true -Drat.skip=true
+script: MAVEN_OPTS="-Xms1G -Xmx1G" mvn -T 2C install --batch-mode -Dmaven.javadoc.skip=true -Drat.skip=true
