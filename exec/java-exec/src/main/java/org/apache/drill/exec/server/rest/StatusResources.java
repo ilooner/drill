@@ -82,15 +82,20 @@ public class StatusResources {
 
   private List<OptionWrapper> getSystemOptionsJSONHelper(boolean internal)
   {
-    List<OptionWrapper> options = new LinkedList<>();
-    OptionManager optionManager = work.getContext().getOptionManager();
-    OptionList optionList = internal ? optionManager.getInternalOptionList(): optionManager.getPublicOptionList();
+    try {
+      List<OptionWrapper> options = new LinkedList<>();
+      OptionManager optionManager = work.getContext().getOptionManager();
+      OptionList optionList = internal ? optionManager.getInternalOptionList() : optionManager.getPublicOptionList();
 
-    for (OptionValue option : optionList) {
-      options.add(new OptionWrapper(option.name, option.getValue(), option.accessibleScopes, option.kind, option.scope));
+      for (OptionValue option : optionList) {
+        options.add(new OptionWrapper(option.name, option.getValue(), option.accessibleScopes, option.kind, option.scope));
+      }
+
+      return options;
+    } catch (Exception e) {
+      logger.error("Internal error", e);
+      throw e;
     }
-
-    return options;
   }
 
   @GET
