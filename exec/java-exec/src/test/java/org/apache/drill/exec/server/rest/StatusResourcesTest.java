@@ -21,7 +21,6 @@ package org.apache.drill.exec.server.rest;
 import org.apache.drill.exec.ExecConstants;
 import org.apache.drill.exec.server.options.OptionDefinition;
 import org.apache.drill.exec.server.options.OptionValidator;
-import org.apache.drill.exec.store.sys.store.provider.InMemoryStoreProvider;
 import org.apache.drill.test.ClientFixture;
 import org.apache.drill.test.ClusterFixture;
 import org.apache.drill.test.FixtureBuilder;
@@ -40,12 +39,8 @@ public class StatusResourcesTest {
     FixtureBuilder builder = ClusterFixture.builder().
       configProperty(ExecConstants.HTTP_ENABLE, true).
       configProperty(OptionValidator.OPTION_DEFAULTS_ROOT + MOCK_PROPERTY, "a").
-      configProperty(ExecConstants.HTTP_PORT, 7155).
       configProperty(ExecConstants.HTTP_PORT_HUNT, true).
       configProperty(ExecConstants.SYS_STORE_PROVIDER_LOCAL_ENABLE_WRITE, false).
-      configProperty(ExecConstants.PROFILES_STORE_INMEMORY, true).
-      configProperty(ExecConstants.DRILLBIT_CONTROL_INJECTIONS, "{}").
-      configProperty(ExecConstants.SYS_STORE_PROVIDER_CLASS, InMemoryStoreProvider.class.getCanonicalName()).
       putDefinition(optionDefinition);
 
     try (ClusterFixture cluster = builder.build();
@@ -67,12 +62,8 @@ public class StatusResourcesTest {
   public void testRetrievePublicOption() throws Exception {
     FixtureBuilder builder = ClusterFixture.builder().
       configProperty(ExecConstants.HTTP_ENABLE, true).
-      configProperty(ExecConstants.HTTP_PORT, 7155).
       configProperty(ExecConstants.HTTP_PORT_HUNT, true).
       configProperty(ExecConstants.SYS_STORE_PROVIDER_LOCAL_ENABLE_WRITE, false).
-      configProperty(ExecConstants.PROFILES_STORE_INMEMORY, true).
-      configProperty(ExecConstants.SYS_STORE_PROVIDER_CLASS, InMemoryStoreProvider.class.getCanonicalName()).
-      configProperty(ExecConstants.DRILLBIT_CONTROL_INJECTIONS, "{}").
       systemOption(ExecConstants.SLICE_TARGET, 20);
     try (ClusterFixture cluster = builder.build();
          ClientFixture client = cluster.clientFixture();

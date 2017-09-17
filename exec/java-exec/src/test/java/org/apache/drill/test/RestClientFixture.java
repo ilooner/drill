@@ -20,7 +20,6 @@ package org.apache.drill.test;
 
 import com.fasterxml.jackson.jaxrs.json.JacksonJsonProvider;
 import com.google.common.base.Preconditions;
-import org.apache.drill.exec.ExecConstants;
 import org.apache.drill.exec.server.rest.StatusResources;
 import org.glassfish.jersey.client.ClientConfig;
 import org.glassfish.jersey.client.JerseyClientBuilder;
@@ -77,9 +76,6 @@ public class RestClientFixture implements AutoCloseable {
   }
 
   public List<StatusResources.OptionWrapper> getStatusInternalOptions() {
-    System.out.println("STUFF");
-    System.out.println(baseTarget.path(StatusResources.PATH_OPTIONS_JSON)
-      .request(MediaType.APPLICATION_JSON).get().readEntity(String.class));
     return baseTarget.path(StatusResources.PATH_INTERNAL_OPTIONS_JSON)
       .request(MediaType.APPLICATION_JSON)
       .get(new GenericType<List<StatusResources.OptionWrapper>>() {});
