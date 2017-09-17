@@ -18,6 +18,7 @@
 
 package org.apache.drill.test;
 
+import com.fasterxml.jackson.jaxrs.json.JacksonJsonProvider;
 import com.google.common.base.Preconditions;
 import org.apache.drill.exec.ExecConstants;
 import org.apache.drill.exec.server.rest.StatusResources;
@@ -59,7 +60,9 @@ public class RestClientFixture implements AutoCloseable {
     String address = cluster.drillbits().iterator().next().getContext().getEndpoint().getAddress();
     String baseURL = "http://" + address + ":" + port;
 
-    client = JerseyClientBuilder.createClient(new ClientConfig());
+    ClientConfig cc = new ClientConfig();
+    cc.getClasses().add(JacksonJsonProvider.class);
+    client = JerseyClientBuilder.createClient(cc);
     baseTarget = client.target(baseURL);
   }
 
