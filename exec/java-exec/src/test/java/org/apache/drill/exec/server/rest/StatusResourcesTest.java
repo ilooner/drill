@@ -43,6 +43,7 @@ public class StatusResourcesTest {
       configProperty(ExecConstants.HTTP_PORT_HUNT, true).
       configProperty(ExecConstants.SYS_STORE_PROVIDER_LOCAL_ENABLE_WRITE, false).
       configProperty(ExecConstants.PROFILES_STORE_INMEMORY, true).
+      configProperty(ExecConstants.DRILLBIT_CONTROL_INJECTIONS, "{}").
       configProperty(ExecConstants.SYS_STORE_PROVIDER_CLASS, InMemoryStoreProvider.class.getCanonicalName()).
       putDefinition(optionDefinition);
 
@@ -69,6 +70,7 @@ public class StatusResourcesTest {
       configProperty(ExecConstants.SYS_STORE_PROVIDER_LOCAL_ENABLE_WRITE, false).
       configProperty(ExecConstants.PROFILES_STORE_INMEMORY, true).
       configProperty(ExecConstants.SYS_STORE_PROVIDER_CLASS, InMemoryStoreProvider.class.getCanonicalName()).
+      configProperty(ExecConstants.DRILLBIT_CONTROL_INJECTIONS, "{}").
       systemOption(ExecConstants.SLICE_TARGET, 20);
     try (ClusterFixture cluster = builder.build();
          ClientFixture client = cluster.clientFixture();
