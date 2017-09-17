@@ -104,6 +104,8 @@ public class WebServer implements AutoCloseable {
 
   private Server embeddedJetty;
 
+  private int port;
+
   /**
    * Create Jetty based web server.
    *
@@ -201,11 +203,9 @@ public class WebServer implements AutoCloseable {
       }
     }
 
-    int port = config.getInt(ExecConstants.HTTP_PORT);
+    port = config.getInt(ExecConstants.HTTP_PORT);
     boolean portHunt = config.getBoolean(ExecConstants.HTTP_PORT_HUNT);
     int retry = 0;
-
-    System.out.println("Port hunting " + portHunt);
 
     for (; retry < PORT_HUNT_TRIES; retry++) {
       embeddedJetty = new Server();
@@ -286,6 +286,14 @@ public class WebServer implements AutoCloseable {
     security.setLoginService(new DrillRestLoginService(workManager.getContext()));
 
     return security;
+  }
+
+  public int getPort() {
+    if (!config.getBoolean(ExecConstants.HTTP_ENABLE)) {
+      throw new UnsupportedOperationException("Http is not enabled");
+    }
+
+    return port;
   }
 
   private ServerConnector createConnector(int port) throws Exception {

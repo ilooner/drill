@@ -55,7 +55,7 @@ public class RestClientFixture implements AutoCloseable {
   private final Client client;
 
   private RestClientFixture(ClusterFixture cluster) {
-    int port = cluster.config.getInt(ExecConstants.HTTP_PORT);
+    int port = cluster.drillbit().getWebServerPort();
     String address = cluster.drillbits().iterator().next().getContext().getEndpoint().getAddress();
     String baseURL = "http://" + address + ":" + port;
 
