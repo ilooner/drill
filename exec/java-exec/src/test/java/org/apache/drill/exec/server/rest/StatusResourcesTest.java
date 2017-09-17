@@ -40,6 +40,7 @@ public class StatusResourcesTest {
     FixtureBuilder builder = ClusterFixture.builder().
       configProperty(ExecConstants.HTTP_ENABLE, true).
       configProperty(OptionValidator.OPTION_DEFAULTS_ROOT + MOCK_PROPERTY, "a").
+      configProperty(ExecConstants.HTTP_PORT, 7155).
       configProperty(ExecConstants.HTTP_PORT_HUNT, true).
       configProperty(ExecConstants.SYS_STORE_PROVIDER_LOCAL_ENABLE_WRITE, false).
       configProperty(ExecConstants.PROFILES_STORE_INMEMORY, true).
@@ -66,6 +67,7 @@ public class StatusResourcesTest {
   public void testRetrievePublicOption() throws Exception {
     FixtureBuilder builder = ClusterFixture.builder().
       configProperty(ExecConstants.HTTP_ENABLE, true).
+      configProperty(ExecConstants.HTTP_PORT, 7155).
       configProperty(ExecConstants.HTTP_PORT_HUNT, true).
       configProperty(ExecConstants.SYS_STORE_PROVIDER_LOCAL_ENABLE_WRITE, false).
       configProperty(ExecConstants.PROFILES_STORE_INMEMORY, true).
