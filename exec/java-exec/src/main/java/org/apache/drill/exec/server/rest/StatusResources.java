@@ -91,6 +91,11 @@ public class StatusResources {
         options.add(new OptionWrapper(option.name, option.getValue(), option.accessibleScopes, option.kind, option.scope));
       }
 
+      System.out.println("It's all good: ");
+      for (OptionWrapper optionWrapper: options) {
+        System.out.println("Option " + optionWrapper.toString());
+      }
+
       return options;
     } catch (Exception e) {
       logger.error("Internal error", e);
