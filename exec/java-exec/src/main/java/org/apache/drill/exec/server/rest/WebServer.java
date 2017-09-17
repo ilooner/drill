@@ -218,7 +218,6 @@ public class WebServer implements AutoCloseable {
         if (portHunt) {
           int nextPort = port++;
           logger.info("Failed to start on port {}, trying port {}", port, nextPort);
-          logger.error("Attempted port failure:", e);
           embeddedJetty.stop();
         } else {
           throw e;

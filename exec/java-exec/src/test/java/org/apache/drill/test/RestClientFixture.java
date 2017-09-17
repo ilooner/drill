@@ -71,14 +71,15 @@ public class RestClientFixture implements AutoCloseable {
    * @return All the external options
    */
   public List<StatusResources.OptionWrapper> getStatusOptions() {
-    System.out.println(baseTarget.path(StatusResources.PATH_OPTIONS_JSON)
-      .request(MediaType.APPLICATION_JSON).get().readEntity(String.class));
     return baseTarget.path(StatusResources.PATH_OPTIONS_JSON)
       .request(MediaType.APPLICATION_JSON)
       .get(new GenericType<List<StatusResources.OptionWrapper>>() {});
   }
 
   public List<StatusResources.OptionWrapper> getStatusInternalOptions() {
+    System.out.println("STUFF");
+    System.out.println(baseTarget.path(StatusResources.PATH_OPTIONS_JSON)
+      .request(MediaType.APPLICATION_JSON).get().readEntity(String.class));
     return baseTarget.path(StatusResources.PATH_INTERNAL_OPTIONS_JSON)
       .request(MediaType.APPLICATION_JSON)
       .get(new GenericType<List<StatusResources.OptionWrapper>>() {});

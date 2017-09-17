@@ -82,6 +82,7 @@ public class StatusResources {
 
   private List<OptionWrapper> getSystemOptionsJSONHelper(boolean internal)
   {
+    System.out.println("TRYING OUT");
     try {
       List<OptionWrapper> options = new LinkedList<>();
       OptionManager optionManager = work.getContext().getOptionManager();
