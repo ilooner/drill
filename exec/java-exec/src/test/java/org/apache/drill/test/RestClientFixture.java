@@ -61,7 +61,7 @@ public class RestClientFixture implements AutoCloseable {
     String baseURL = "http://" + address + ":" + port;
 
     ClientConfig cc = new ClientConfig();
-    cc.getClasses().add(JacksonJsonProvider.class);
+    cc.register(JacksonJsonProvider.class);
     client = JerseyClientBuilder.createClient(cc);
     baseTarget = client.target(baseURL);
   }
