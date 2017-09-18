@@ -93,7 +93,7 @@ import static org.apache.drill.exec.server.rest.auth.DrillUserPrincipal.AUTHENTI
 public class WebServer implements AutoCloseable {
   private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(WebServer.class);
 
-  private static final int PORT_HUNT_TRIES = 10;
+  private static final int PORT_HUNT_TRIES = 100;
 
   private final DrillConfig config;
 
