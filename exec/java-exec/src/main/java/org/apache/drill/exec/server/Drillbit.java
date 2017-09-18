@@ -139,6 +139,10 @@ public class Drillbit implements AutoCloseable {
     logger.info("Construction completed ({} ms).", w.elapsed(TimeUnit.MILLISECONDS));
   }
 
+  public int getUserPort() {
+    return engine.getUserPort();
+  }
+
   public int getWebServerPort() {
     return webServer.getPort();
   }
