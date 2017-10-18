@@ -29,7 +29,7 @@ import org.junit.rules.TestRule;
 public class TestTpchPlanning extends PlanningBase {
   //private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(TestTpchPlanning.class);
 
-  @Rule public final TestRule TIMEOUT = TestTools.getTimeoutRule(50000);
+  @Rule public final TestRule TIMEOUT = TestTools.getTimeoutRule(180000);
 
   @Test
   public void tpch01() throws Exception {
