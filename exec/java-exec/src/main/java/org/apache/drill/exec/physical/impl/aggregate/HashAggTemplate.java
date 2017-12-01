@@ -495,7 +495,8 @@ public abstract class HashAggTemplate implements HashAggregator {
     currentBatchRecordCount = newIncoming.getRecordCount(); // first batch in this spill file
     nextPartitionToReturn = 0;
     for (int i = 0; i < numPartitions; i++ ) {
-      htables[i].reinit(newIncoming);
+      htables[i].updateIncoming(newIncoming.getContainer());
+      htables[i].reset();
       if ( batchHolders[i] != null) {
         for (BatchHolder bh : batchHolders[i]) {
           bh.clear();

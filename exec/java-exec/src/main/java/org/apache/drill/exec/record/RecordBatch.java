@@ -235,6 +235,13 @@ public interface RecordBatch extends VectorAccessible {
   public VectorContainer getOutgoingContainer();
 
   /**
+   *  Return the internal vector container
+   *
+   * @return The internal vector container
+   */
+  public VectorContainer getContainer();
+
+  /**
    * Gets the value vector type and ID for the given schema path.  The
    * TypedFieldId should store a fieldId which is the same as the ordinal
    * position of the field within the Iterator provided this class's
