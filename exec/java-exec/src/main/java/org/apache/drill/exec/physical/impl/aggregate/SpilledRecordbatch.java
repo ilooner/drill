@@ -111,6 +111,9 @@ public class SpilledRecordbatch implements CloseableRecordBatch {
   public VectorContainer getOutgoingContainer() { return container; }
 
   @Override
+  public VectorContainer getContainer() { return container; }
+
+  @Override
   public int getRecordCount() { return container.getRecordCount(); }
 
   @Override

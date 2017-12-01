@@ -225,7 +225,7 @@ public class ChainedHashTable {
     setupGetHash(cg /* use top level code generator for getHash */, GetHashIncomingProbeMapping, incomingProbe, keyExprsProbe, true);
 
     HashTable ht = context.getImplementationClass(top);
-    ht.setup(htConfig, context, allocator, incomingBuild, incomingProbe, outgoing, htContainerOrig);
+    ht.setup(htConfig, context, allocator, incomingBuild.getContainer(), incomingProbe, outgoing, htContainerOrig);
 
     return ht;
   }

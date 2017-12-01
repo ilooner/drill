@@ -26,6 +26,7 @@ import org.apache.drill.common.exceptions.RetryAfterSpillException;
 import org.apache.drill.common.expression.FieldReference;
 import org.apache.drill.common.logical.data.JoinCondition;
 import org.apache.drill.common.logical.data.NamedExpression;
+import org.apache.drill.common.types.MinorType;
 import org.apache.drill.common.types.TypeProtos;
 import org.apache.drill.common.types.TypeProtos.DataMode;
 import org.apache.drill.common.types.TypeProtos.MajorType;
@@ -57,6 +58,7 @@ import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.TypedFieldId;
 import org.apache.drill.exec.record.VectorContainer;
 import org.apache.drill.exec.record.VectorWrapper;
+import org.apache.drill.exec.vector.IntVector;
 import org.apache.drill.exec.vector.ValueVector;
 import org.apache.drill.exec.vector.complex.AbstractContainerVector;
 import org.apache.calcite.rel.core.JoinRelType;
@@ -105,7 +107,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   // Schema of the build side
   private BatchSchema rightSchema = null;
 
-
   // Generator mapping for the build side
   // Generator mapping for the build side : scalar
   private static final GeneratorMapping PROJECT_BUILD =
@@ -142,6 +143,11 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
   private final HashTableStats htStats = new HashTableStats();
 
+  private final MajorType HVtype = MajorType.newBuilder()
+    .setMinorType(org.apache.drill.common.types.TypeProtos.MinorType.INT /* dataType */ )
+    .setMode(DataMode.REQUIRED /* mode */ )
+    .build();
+
   public enum Metric implements MetricDef {
 
     NUM_BUCKETS,
@@ -176,6 +182,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       for (final VectorWrapper<?> w : right) {
         vectors.addOrGet(w.getField());
       }
+      vectors.addOrGet(MaterializedField.create("Hash_Values", HVtype));
       vectors.buildSchema(SelectionVectorMode.NONE);
       vectors.setRecordCount(0);
       hyperContainer = new ExpandableHyperContainer(vectors);
@@ -302,6 +309,9 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   }
 
   public void executeBuildPhase() throws SchemaChangeException, ClassTransformationException, IOException {
+    int batchCount = 0;
+    List<RecordBatchData> batches = new ArrayList<RecordBatchData>();
+    int HVindex = 0;
     //Setup the underlying hash table
 
     // skip first batch if count is zero, as it may be an empty schema batch
@@ -347,25 +357,12 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       case OK:
         final int currentRecordCount = right.getRecordCount();
 
-                    /* For every new build batch, we store some state in the helper context
-                     * Add new state to the helper context
-                     */
-        hjHelper.addNewBatch(currentRecordCount);
-
-        // Holder contains the global index where the key is hashed into using the hash table
-        final IndexPointer htIndex = new IndexPointer();
-
+        IntVector HV_vector = new IntVector( MaterializedField.create("Hash_Values", HVtype), oContext.getAllocator());
+        HV_vector.allocateNew(currentRecordCount);
         // For every record in the build batch , hash the key columns
         for (int i = 0; i < currentRecordCount; i++) {
           int hashCode = hashTable.getHashCode(i);
-          try {
-            hashTable.put(i, htIndex, hashCode);
-          } catch (RetryAfterSpillException RE) { throw new OutOfMemoryException("HT put");} // Hash Join can not retry yet
-                        /* Use the global index returned by the hash table, to store
-                         * the current record index and batch index. This will be used
-                         * later when we probe and find a match.
-                         */
-          hjHelper.setCurrentIndex(htIndex.value, buildBatchIndex, i);
+          HV_vector.getMutator().set(i, hashCode);   // keep the hash value
         }
 
                     /* Completed hashing all records in this batch. Transfer the batch
@@ -373,26 +370,64 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
                      * records that have matching keys on the probe side.
                      */
         final RecordBatchData nextBatch = new RecordBatchData(right, oContext.getAllocator());
-        boolean success = false;
-        try {
-          if (hyperContainer == null) {
-            hyperContainer = new ExpandableHyperContainer(nextBatch.getContainer());
-          } else {
-            hyperContainer.addBatch(nextBatch.getContainer());
-          }
+        TypedFieldId tfid = nextBatch.getContainer().add(HV_vector);
+        HVindex = tfid.getFieldIds()[0]; // the index for the hv vector
+        nextBatch.getContainer().buildSchema(SelectionVectorMode.NONE);
+        batches.add( batchCount++ , nextBatch) ;
 
-          // completed processing a batch, increment batch index
-          buildBatchIndex++;
-          success = true;
-        } finally {
-          if (!success) {
-            nextBatch.clear();
-          }
-        }
         break;
       }
       // Get the next record batch
       rightUpstream = next(HashJoinHelper.RIGHT_INPUT, right);
+    }
+
+    //
+    //  Traverse all the incoming batches, and build the hash table
+    //
+    for (int curr = 0; curr < batchCount; curr++) {
+      RecordBatchData nextBatch = batches.get(curr);
+      final int currentRecordCount = nextBatch.getRecordCount();
+
+                    /* For every new build batch, we store some state in the helper context
+                     * Add new state to the helper context
+                     */
+      hjHelper.addNewBatch(currentRecordCount);
+
+      // Holder contains the global index where the key is hashed into using the hash table
+      final IndexPointer htIndex = new IndexPointer();
+
+      hashTable.updateIncoming(nextBatch.getContainer());
+
+      for (int recInd = 0; recInd < currentRecordCount; recInd++) {
+        IntVector HV_vector = (IntVector) nextBatch.getVectors().get(HVindex);
+        int hashCode = HV_vector.getAccessor().get(recInd);
+        try {
+          hashTable.put(recInd, htIndex, hashCode);
+        } catch (RetryAfterSpillException RE) { throw new OutOfMemoryException("HT put");} // Hash Join can not retry yet
+                        /* Use the global index returned by the hash table, to store
+                         * the current record index and batch index. This will be used
+                         * later when we probe and find a match.
+                         */
+        hjHelper.setCurrentIndex(htIndex.value, curr + 1 /* buildBatchIndex */, recInd);
+      }
+
+      boolean success = false;
+      try {
+        if (hyperContainer == null) {
+          hyperContainer = new ExpandableHyperContainer(nextBatch.getContainer());
+        } else {
+          hyperContainer.addBatch(nextBatch.getContainer());
+        }
+
+        // completed processing a batch, increment batch index
+        buildBatchIndex++;
+        success = true;
+      } finally {
+        if (!success) {
+          nextBatch.clear();
+        }
+      }
+
     }
   }
 

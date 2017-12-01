@@ -83,7 +83,7 @@ public abstract class HashTableTemplate implements HashTable {
   private BufferAllocator allocator;
 
   // The incoming build side record batch
-  private RecordBatch incomingBuild;
+  private VectorContainer incomingBuild;
 
   // The incoming probe side record batch (may be null)
   private RecordBatch incomingProbe;
@@ -421,7 +421,7 @@ public abstract class HashTableTemplate implements HashTable {
 
     @RuntimeOverridden
     protected void setupInterior(
-        @Named("incomingBuild") RecordBatch incomingBuild,
+        @Named("incomingBuild") VectorContainer incomingBuild,
         @Named("incomingProbe") RecordBatch incomingProbe,
         @Named("outgoing") RecordBatch outgoing,
         @Named("htContainer") VectorContainer htContainer) throws SchemaChangeException {
@@ -451,7 +451,7 @@ public abstract class HashTableTemplate implements HashTable {
 
 
   @Override
-  public void setup(HashTableConfig htConfig, FragmentContext context, BufferAllocator allocator, RecordBatch incomingBuild, RecordBatch incomingProbe, RecordBatch outgoing, VectorContainer htContainerOrig) {
+  public void setup(HashTableConfig htConfig, FragmentContext context, BufferAllocator allocator, VectorContainer incomingBuild, RecordBatch incomingProbe, RecordBatch outgoing, VectorContainer htContainerOrig) {
     float loadf = htConfig.getLoadFactor();
     int initialCap = htConfig.getInitialCapacity();
 
@@ -781,9 +781,9 @@ public abstract class HashTableTemplate implements HashTable {
     batchHolders = new ArrayList<BatchHolder>();
     startIndices = allocMetadataVector(originalTableSize, EMPTY_SLOT);
   }
-  public void reinit(RecordBatch newIncoming) {
+  public void updateIncoming(VectorContainer newIncoming) {
     incomingBuild = newIncoming;
-    reset();
+    // reset();
     try {
       updateBatches();  // Needed to update the value vectors in the generated code with the new incoming
     } catch (SchemaChangeException e) {
@@ -813,7 +813,7 @@ public abstract class HashTableTemplate implements HashTable {
   public void setMaxVarcharSize(int size) { maxVarcharSize = size; }
 
   // These methods will be code-generated in the context of the outer class
-  protected abstract void doSetup(@Named("incomingBuild") RecordBatch incomingBuild, @Named("incomingProbe") RecordBatch incomingProbe) throws SchemaChangeException;
+  protected abstract void doSetup(@Named("incomingBuild") VectorContainer incomingBuild, @Named("incomingProbe") RecordBatch incomingProbe) throws SchemaChangeException;
 
   protected abstract int getHashBuild(@Named("incomingRowIdx") int incomingRowIdx, @Named("seedValue") int seedValue) throws SchemaChangeException;
 
