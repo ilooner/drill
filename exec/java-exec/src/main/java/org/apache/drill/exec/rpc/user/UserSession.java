@@ -59,6 +59,7 @@ public class UserSession implements AutoCloseable {
   private SessionOptionManager sessionOptions;
   private final AtomicInteger queryCount;
   private final String sessionId;
+  private int capabilitiesVersion;
 
   /** Stores list of temporary tables, key is original table name converted to lower case to achieve case-insensitivity,
    *  value is generated table name. **/
@@ -120,6 +121,11 @@ public class UserSession implements AutoCloseable {
       return this;
     }
 
+    public Builder setCapabilitiesVersion(int capabilitiesVersion) {
+      userSession.capabilitiesVersion = capabilitiesVersion;
+      return this;
+    }
+
     public UserSession build() {
       if (userSession.properties.containsKey(DrillProperties.QUOTING_IDENTIFIERS)) {
         if (userSession.sessionOptions != null) {
@@ -146,6 +152,7 @@ public class UserSession implements AutoCloseable {
     temporaryTables = Maps.newConcurrentMap();
     temporaryLocations = Maps.newConcurrentMap();
     properties = DrillProperties.createEmpty();
+    capabilitiesVersion = 0;
   }
 
   public boolean isSupportComplexTypes() {
@@ -158,6 +165,10 @@ public class UserSession implements AutoCloseable {
 
   public UserCredentials getCredentials() {
     return credentials;
+  }
+
+  public int getCapabilitiesVersion() {
+    return capabilitiesVersion;
   }
 
   /**

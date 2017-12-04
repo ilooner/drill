@@ -7098,6 +7098,24 @@ public final class BitControl {
      */
     com.google.protobuf.ByteString
         getSessionIdBytes();
+
+    // optional int32 capabilities_version = 5 [default = 0];
+    /**
+     * <code>optional int32 capabilities_version = 5 [default = 0];</code>
+     *
+     * <pre>
+     * Client capabilities version
+     * </pre>
+     */
+    boolean hasCapabilitiesVersion();
+    /**
+     * <code>optional int32 capabilities_version = 5 [default = 0];</code>
+     *
+     * <pre>
+     * Client capabilities version
+     * </pre>
+     */
+    int getCapabilitiesVersion();
   }
   /**
    * Protobuf type {@code exec.bit.control.QueryContextInformation}
@@ -7168,6 +7186,11 @@ public final class BitControl {
             case 34: {
               bitField0_ |= 0x00000008;
               sessionId_ = input.readBytes();
+              break;
+            }
+            case 40: {
+              bitField0_ |= 0x00000010;
+              capabilitiesVersion_ = input.readInt32();
               break;
             }
           }
@@ -7368,11 +7391,36 @@ public final class BitControl {
       }
     }
 
+    // optional int32 capabilities_version = 5 [default = 0];
+    public static final int CAPABILITIES_VERSION_FIELD_NUMBER = 5;
+    private int capabilitiesVersion_;
+    /**
+     * <code>optional int32 capabilities_version = 5 [default = 0];</code>
+     *
+     * <pre>
+     * Client capabilities version
+     * </pre>
+     */
+    public boolean hasCapabilitiesVersion() {
+      return ((bitField0_ & 0x00000010) == 0x00000010);
+    }
+    /**
+     * <code>optional int32 capabilities_version = 5 [default = 0];</code>
+     *
+     * <pre>
+     * Client capabilities version
+     * </pre>
+     */
+    public int getCapabilitiesVersion() {
+      return capabilitiesVersion_;
+    }
+
     private void initFields() {
       queryStartTime_ = 0L;
       timeZone_ = 0;
       defaultSchemaName_ = "";
       sessionId_ = "";
+      capabilitiesVersion_ = 0;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -7398,6 +7446,9 @@ public final class BitControl {
       if (((bitField0_ & 0x00000008) == 0x00000008)) {
         output.writeBytes(4, getSessionIdBytes());
       }
+      if (((bitField0_ & 0x00000010) == 0x00000010)) {
+        output.writeInt32(5, capabilitiesVersion_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -7422,6 +7473,10 @@ public final class BitControl {
       if (((bitField0_ & 0x00000008) == 0x00000008)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(4, getSessionIdBytes());
+      }
+      if (((bitField0_ & 0x00000010) == 0x00000010)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(5, capabilitiesVersion_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -7547,6 +7602,8 @@ public final class BitControl {
         bitField0_ = (bitField0_ & ~0x00000004);
         sessionId_ = "";
         bitField0_ = (bitField0_ & ~0x00000008);
+        capabilitiesVersion_ = 0;
+        bitField0_ = (bitField0_ & ~0x00000010);
         return this;
       }
 
@@ -7591,6 +7648,10 @@ public final class BitControl {
           to_bitField0_ |= 0x00000008;
         }
         result.sessionId_ = sessionId_;
+        if (((from_bitField0_ & 0x00000010) == 0x00000010)) {
+          to_bitField0_ |= 0x00000010;
+        }
+        result.capabilitiesVersion_ = capabilitiesVersion_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -7622,6 +7683,9 @@ public final class BitControl {
           bitField0_ |= 0x00000008;
           sessionId_ = other.sessionId_;
           onChanged();
+        }
+        if (other.hasCapabilitiesVersion()) {
+          setCapabilitiesVersion(other.getCapabilitiesVersion());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -7940,6 +8004,55 @@ public final class BitControl {
   }
   bitField0_ |= 0x00000008;
         sessionId_ = value;
+        onChanged();
+        return this;
+      }
+
+      // optional int32 capabilities_version = 5 [default = 0];
+      private int capabilitiesVersion_ ;
+      /**
+       * <code>optional int32 capabilities_version = 5 [default = 0];</code>
+       *
+       * <pre>
+       * Client capabilities version
+       * </pre>
+       */
+      public boolean hasCapabilitiesVersion() {
+        return ((bitField0_ & 0x00000010) == 0x00000010);
+      }
+      /**
+       * <code>optional int32 capabilities_version = 5 [default = 0];</code>
+       *
+       * <pre>
+       * Client capabilities version
+       * </pre>
+       */
+      public int getCapabilitiesVersion() {
+        return capabilitiesVersion_;
+      }
+      /**
+       * <code>optional int32 capabilities_version = 5 [default = 0];</code>
+       *
+       * <pre>
+       * Client capabilities version
+       * </pre>
+       */
+      public Builder setCapabilitiesVersion(int value) {
+        bitField0_ |= 0x00000010;
+        capabilitiesVersion_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional int32 capabilities_version = 5 [default = 0];</code>
+       *
+       * <pre>
+       * Client capabilities version
+       * </pre>
+       */
+      public Builder clearCapabilitiesVersion() {
+        bitField0_ = (bitField0_ & ~0x00000010);
+        capabilitiesVersion_ = 0;
         onChanged();
         return this;
       }
@@ -9412,26 +9525,27 @@ public final class BitControl {
       "ol.Collector\"\210\001\n\tCollector\022\"\n\032opposite_m" +
       "ajor_fragment_id\030\001 \001(\005\022#\n\027incoming_minor" +
       "_fragment\030\002 \003(\005B\002\020\001\022\035\n\025supports_out_of_o",
-      "rder\030\003 \001(\010\022\023\n\013is_spooling\030\004 \001(\010\"w\n\027Query" +
-      "ContextInformation\022\030\n\020query_start_time\030\001" +
-      " \001(\003\022\021\n\ttime_zone\030\002 \001(\005\022\033\n\023default_schem" +
-      "a_name\030\003 \001(\t\022\022\n\nsession_id\030\004 \001(\t\"f\n\017Work" +
-      "QueueStatus\022(\n\010endpoint\030\001 \001(\0132\026.exec.Dri" +
-      "llbitEndpoint\022\024\n\014queue_length\030\002 \001(\005\022\023\n\013r" +
-      "eport_time\030\003 \001(\003\"h\n\020FinishedReceiver\022*\n\010" +
-      "receiver\030\001 \001(\0132\030.exec.bit.FragmentHandle" +
-      "\022(\n\006sender\030\002 \001(\0132\030.exec.bit.FragmentHand" +
-      "le*\206\003\n\007RpcType\022\r\n\tHANDSHAKE\020\000\022\007\n\003ACK\020\001\022\013",
-      "\n\007GOODBYE\020\002\022\034\n\030REQ_INITIALIZE_FRAGMENTS\020" +
-      "\003\022\027\n\023REQ_CANCEL_FRAGMENT\020\006\022\031\n\025REQ_RECEIV" +
-      "ER_FINISHED\020\007\022\027\n\023REQ_FRAGMENT_STATUS\020\010\022\022" +
-      "\n\016REQ_BIT_STATUS\020\t\022\024\n\020REQ_QUERY_STATUS\020\n" +
-      "\022\024\n\020REQ_QUERY_CANCEL\020\017\022\030\n\024REQ_UNPAUSE_FR" +
-      "AGMENT\020\020\022\016\n\nREQ_CUSTOM\020\021\022\030\n\024RESP_FRAGMEN" +
-      "T_HANDLE\020\013\022\030\n\024RESP_FRAGMENT_STATUS\020\014\022\023\n\017" +
-      "RESP_BIT_STATUS\020\r\022\025\n\021RESP_QUERY_STATUS\020\016" +
-      "\022\017\n\013RESP_CUSTOM\020\022\022\020\n\014SASL_MESSAGE\020\023B+\n\033o" +
-      "rg.apache.drill.exec.protoB\nBitControlH\001"
+      "rder\030\003 \001(\010\022\023\n\013is_spooling\030\004 \001(\010\"\230\001\n\027Quer" +
+      "yContextInformation\022\030\n\020query_start_time\030" +
+      "\001 \001(\003\022\021\n\ttime_zone\030\002 \001(\005\022\033\n\023default_sche" +
+      "ma_name\030\003 \001(\t\022\022\n\nsession_id\030\004 \001(\t\022\037\n\024cap" +
+      "abilities_version\030\005 \001(\005:\0010\"f\n\017WorkQueueS" +
+      "tatus\022(\n\010endpoint\030\001 \001(\0132\026.exec.DrillbitE" +
+      "ndpoint\022\024\n\014queue_length\030\002 \001(\005\022\023\n\013report_" +
+      "time\030\003 \001(\003\"h\n\020FinishedReceiver\022*\n\010receiv" +
+      "er\030\001 \001(\0132\030.exec.bit.FragmentHandle\022(\n\006se" +
+      "nder\030\002 \001(\0132\030.exec.bit.FragmentHandle*\206\003\n",
+      "\007RpcType\022\r\n\tHANDSHAKE\020\000\022\007\n\003ACK\020\001\022\013\n\007GOOD" +
+      "BYE\020\002\022\034\n\030REQ_INITIALIZE_FRAGMENTS\020\003\022\027\n\023R" +
+      "EQ_CANCEL_FRAGMENT\020\006\022\031\n\025REQ_RECEIVER_FIN" +
+      "ISHED\020\007\022\027\n\023REQ_FRAGMENT_STATUS\020\010\022\022\n\016REQ_" +
+      "BIT_STATUS\020\t\022\024\n\020REQ_QUERY_STATUS\020\n\022\024\n\020RE" +
+      "Q_QUERY_CANCEL\020\017\022\030\n\024REQ_UNPAUSE_FRAGMENT" +
+      "\020\020\022\016\n\nREQ_CUSTOM\020\021\022\030\n\024RESP_FRAGMENT_HAND" +
+      "LE\020\013\022\030\n\024RESP_FRAGMENT_STATUS\020\014\022\023\n\017RESP_B" +
+      "IT_STATUS\020\r\022\025\n\021RESP_QUERY_STATUS\020\016\022\017\n\013RE" +
+      "SP_CUSTOM\020\022\022\020\n\014SASL_MESSAGE\020\023B+\n\033org.apa",
+      "che.drill.exec.protoB\nBitControlH\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -9485,7 +9599,7 @@ public final class BitControl {
           internal_static_exec_bit_control_QueryContextInformation_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_exec_bit_control_QueryContextInformation_descriptor,
-              new java.lang.String[] { "QueryStartTime", "TimeZone", "DefaultSchemaName", "SessionId", });
+              new java.lang.String[] { "QueryStartTime", "TimeZone", "DefaultSchemaName", "SessionId", "CapabilitiesVersion", });
           internal_static_exec_bit_control_WorkQueueStatus_descriptor =
             getDescriptor().getMessageTypes().get(8);
           internal_static_exec_bit_control_WorkQueueStatus_fieldAccessorTable = new

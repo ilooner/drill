@@ -34,6 +34,7 @@ import org.apache.drill.common.KerberosUtil;
 import org.apache.drill.common.config.DrillConfig;
 import org.apache.drill.common.config.DrillProperties;
 import org.apache.drill.common.exceptions.DrillException;
+import org.apache.drill.exec.DrillCapabilities;
 import org.apache.drill.exec.client.InvalidConnectionInfoException;
 import org.apache.drill.exec.memory.BufferAllocator;
 import org.apache.drill.exec.proto.CoordinationProtos.DrillbitEndpoint;
@@ -177,6 +178,7 @@ public class UserClient
     final UserToBitHandshake.Builder hsBuilder =
         UserToBitHandshake.newBuilder()
             .setRpcVersion(UserRpcConfig.RPC_VERSION)
+            .setCapabilitiesVersion(DrillCapabilities.getDrillCapabilitiesVersion())
             .setSupportListening(true)
             .setSupportComplexTypes(supportComplexTypes)
             .setSupportTimeout(true).setCredentials(credentials)

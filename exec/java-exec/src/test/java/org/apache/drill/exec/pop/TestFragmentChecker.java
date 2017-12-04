@@ -20,6 +20,7 @@ package org.apache.drill.exec.pop;
 import java.util.List;
 
 import org.apache.drill.categories.PlannerTest;
+import org.apache.drill.exec.DrillCapabilities;
 import org.apache.drill.exec.planner.PhysicalPlanReader;
 import org.apache.drill.exec.planner.PhysicalPlanReaderTestFactory;
 import org.apache.drill.exec.planner.fragment.Fragment;
@@ -65,7 +66,8 @@ public class TestFragmentChecker extends PopUnitTestBase{
       endpoints.add(b1);
     }
 
-    final QueryContextInformation queryContextInfo = Utilities.createQueryContextInfo("dummySchemaName", "938ea2d9-7cb9-4baf-9414-a5a0b7777e8e");
+    final QueryContextInformation queryContextInfo = Utilities.createQueryContextInfo(
+      "dummySchemaName", "938ea2d9-7cb9-4baf-9414-a5a0b7777e8e", DrillCapabilities.getDrillCapabilitiesVersion());
     QueryWorkUnit qwu = par.getFragments(new OptionList(), localBit, QueryId.getDefaultInstance(), endpoints, fragmentRoot,
         UserSession.Builder.newBuilder().withCredentials(UserBitShared.UserCredentials.newBuilder().setUserName("foo").build()).build(),
         queryContextInfo);

@@ -83,6 +83,7 @@ message UserToBitHandshake {
   optional bool support_timeout = 7 [default = false];
   optional RpcEndpointInfos client_infos = 8;
   optional SaslSupport sasl_support = 9;
+  optional int32 capabilities_version = 10 [default = 0]; // Client capabilities version
 }
 
 message RequestResults {

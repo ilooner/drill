@@ -997,6 +997,8 @@ public final class SchemaBitControl
                     output.writeString(3, message.getDefaultSchemaName(), false);
                 if(message.hasSessionId())
                     output.writeString(4, message.getSessionId(), false);
+                if(message.hasCapabilitiesVersion())
+                    output.writeInt32(5, message.getCapabilitiesVersion(), false);
             }
             public boolean isInitialized(org.apache.drill.exec.proto.BitControl.QueryContextInformation message)
             {
@@ -1048,6 +1050,9 @@ public final class SchemaBitControl
                         case 4:
                             builder.setSessionId(input.readString());
                             break;
+                        case 5:
+                            builder.setCapabilitiesVersion(input.readInt32());
+                            break;
                         default:
                             input.handleUnknownField(number, this);
                     }
@@ -1092,6 +1097,7 @@ public final class SchemaBitControl
                 case 2: return "timeZone";
                 case 3: return "defaultSchemaName";
                 case 4: return "sessionId";
+                case 5: return "capabilitiesVersion";
                 default: return null;
             }
         }
@@ -1107,6 +1113,7 @@ public final class SchemaBitControl
             fieldMap.put("timeZone", 2);
             fieldMap.put("defaultSchemaName", 3);
             fieldMap.put("sessionId", 4);
+            fieldMap.put("capabilitiesVersion", 5);
         }
     }
 

@@ -249,6 +249,7 @@ public class UserServer extends BasicServer<RpcType, BitToUserConnection> {
           .withOptionManager(userWorker.getSystemOptions())
           .withUserProperties(inbound.getProperties())
           .setSupportComplexTypes(inbound.getSupportComplexTypes())
+          .setCapabilitiesVersion(inbound.getCapabilitiesVersion())
           .build();
 
       // if inbound impersonation is enabled and a target is mentioned

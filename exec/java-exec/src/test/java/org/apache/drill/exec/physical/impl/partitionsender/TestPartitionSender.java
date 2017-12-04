@@ -31,6 +31,7 @@ import java.util.Random;
 
 import org.apache.drill.categories.OperatorTest;
 import org.apache.drill.PlanTestBase;
+import org.apache.drill.exec.DrillCapabilities;
 import org.apache.drill.exec.exception.OutOfMemoryException;
 import org.apache.drill.exec.expr.fn.FunctionImplementationRegistry;
 import org.apache.drill.exec.ops.FragmentContextImpl;
@@ -205,7 +206,8 @@ public class TestPartitionSender extends PlanTestBase {
       RecordBatch incoming, FunctionImplementationRegistry registry, PhysicalPlanReader planReader, PlanningSet planningSet, Fragment rootFragment,
       int expectedThreadsCount) throws Exception {
 
-    final QueryContextInformation queryContextInfo = Utilities.createQueryContextInfo("dummySchemaName", "938ea2d9-7cb9-4baf-9414-a5a0b7777e8e");
+    final QueryContextInformation queryContextInfo = Utilities.createQueryContextInfo(
+      "dummySchemaName", "938ea2d9-7cb9-4baf-9414-a5a0b7777e8e", DrillCapabilities.getDrillCapabilitiesVersion());
     final QueryWorkUnit qwu = PARALLELIZER.getFragments(options, drillbitContext.getEndpoint(),
         QueryId.getDefaultInstance(),
         drillbitContext.getBits(), rootFragment, USER_SESSION, queryContextInfo);

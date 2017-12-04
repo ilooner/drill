@@ -62,7 +62,8 @@ public class Utilities {
    * @param defaultSchemaName
    * @return
    */
-  public static QueryContextInformation createQueryContextInfo(final String defaultSchemaName, final String sessionId) {
+  public static QueryContextInformation createQueryContextInfo(final String defaultSchemaName,
+    final String sessionId, final int capabilitiesVersion) {
     final long queryStartTime = System.currentTimeMillis();
     final int timeZone = DateUtility.getIndex(System.getProperty("user.timezone"));
     return QueryContextInformation.newBuilder()
@@ -70,6 +71,7 @@ public class Utilities {
         .setQueryStartTime(queryStartTime)
         .setTimeZone(timeZone)
         .setSessionId(sessionId)
+        .setCapabilitiesVersion(capabilitiesVersion)
         .build();
   }
 

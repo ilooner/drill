@@ -159,6 +159,7 @@ public class SystemOptionManager extends BaseOptionManager implements AutoClosea
       new OptionDefinition(ExecConstants.PARQUET_PAGEREADER_BUFFER_SIZE_VALIDATOR),
       new OptionDefinition(ExecConstants.PARQUET_PAGEREADER_USE_FADVISE_VALIDATOR),
       new OptionDefinition(ExecConstants.PARQUET_READER_INT96_AS_TIMESTAMP_VALIDATOR),
+      new OptionDefinition(ExecConstants.PARQUET_FLAT_READER_BULK_VALIDATOR),
       new OptionDefinition(ExecConstants.JSON_READER_ALL_TEXT_MODE_VALIDATOR),
       new OptionDefinition(ExecConstants.JSON_WRITER_NAN_INF_NUMBERS_VALIDATOR),
       new OptionDefinition(ExecConstants.JSON_READER_NAN_INF_NUMBERS_VALIDATOR),
@@ -220,6 +221,7 @@ public class SystemOptionManager extends BaseOptionManager implements AutoClosea
       new OptionDefinition(ExecConstants.IMPLICIT_SUFFIX_COLUMN_LABEL_VALIDATOR),
       new OptionDefinition(ExecConstants.IMPLICIT_FQN_COLUMN_LABEL_VALIDATOR),
       new OptionDefinition(ExecConstants.IMPLICIT_FILEPATH_COLUMN_LABEL_VALIDATOR),
+      new OptionDefinition(ExecConstants.SCAN_OPTIMIZED_IMPLICIT_COLUMNS_VALIDATOR),
       new OptionDefinition(ExecConstants.CODE_GEN_EXP_IN_METHOD_SIZE_VALIDATOR),
       new OptionDefinition(ExecConstants.CREATE_PREPARE_STATEMENT_TIMEOUT_MILLIS_VALIDATOR),
       new OptionDefinition(ExecConstants.DYNAMIC_UDF_SUPPORT_ENABLED_VALIDATOR,  new OptionMetaData(OptionValue.AccessibleScopes.SYSTEM, true, false)),
@@ -271,8 +273,8 @@ public class SystemOptionManager extends BaseOptionManager implements AutoClosea
                              final DrillConfig bootConfig, final CaseInsensitiveMap<OptionDefinition> definitions) {
     this.provider = provider;
     this.config = PersistentStoreConfig.newJacksonBuilder(lpPersistence.getMapper(), PersistedOptionValue.class)
-          .name("sys.options")
-          .build();
+        .name("sys.options")
+        .build();
     this.definitions = definitions;
     this.defaults = populateDefaultValues(definitions, bootConfig);
   }
@@ -354,7 +356,7 @@ public class SystemOptionManager extends BaseOptionManager implements AutoClosea
 
     // otherwise, return default set in the validator.
     return defaults.get(name);
-  }
+    }
 
   @Override
   public OptionValue getDefault(String optionName) {
@@ -457,8 +459,8 @@ public class SystemOptionManager extends BaseOptionManager implements AutoClosea
     final OptionDefinition definition = definitions.get(name);
     if (definition == null) {
       throw UserException.validationError()
-        .message(String.format("The option '%s' does not exist.", name.toLowerCase()))
-        .build(logger);
+      .message(String.format("The option '%s' does not exist.", name.toLowerCase()))
+      .build(logger);
     }
     return definition;
   }

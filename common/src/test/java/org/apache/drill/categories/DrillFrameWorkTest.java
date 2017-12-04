@@ -15,21 +15,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.drill.exec.vector;
 
-public interface NullableVectorDefinitionSetter {
+package org.apache.drill.categories;
 
-  /**
-   * Set value at position "index" to be defined.
-   * @param index value position
-   */
-  public void setIndexDefined(int index);
-
-  /**
-   * Set a contiguous set of values starting at position "index" to be defined.
-   * @param index value position
-   * @param number of contiguous values
-   */
-  public void setIndexDefined(int index, int numValues);
-
+/**
+ * This is a category used to mark unit tests that test the Drill framework.
+ */
+public interface DrillFrameWorkTest {
 }

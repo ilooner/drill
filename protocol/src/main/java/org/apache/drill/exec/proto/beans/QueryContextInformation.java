@@ -46,11 +46,13 @@ public final class QueryContextInformation implements Externalizable, Message<Qu
 
     static final QueryContextInformation DEFAULT_INSTANCE = new QueryContextInformation();
 
+    static final int DEFAULT_CAPABILITIES_VERSION = 0;
     
     private long queryStartTime;
     private int timeZone;
     private String defaultSchemaName;
     private String sessionId;
+    private int capabilitiesVersion = DEFAULT_CAPABILITIES_VERSION;
 
     public QueryContextInformation()
     {
@@ -108,6 +110,19 @@ public final class QueryContextInformation implements Externalizable, Message<Qu
     public QueryContextInformation setSessionId(String sessionId)
     {
         this.sessionId = sessionId;
+        return this;
+    }
+
+    // capabilitiesVersion
+
+    public int getCapabilitiesVersion()
+    {
+        return capabilitiesVersion;
+    }
+
+    public QueryContextInformation setCapabilitiesVersion(int capabilitiesVersion)
+    {
+        this.capabilitiesVersion = capabilitiesVersion;
         return this;
     }
 
@@ -177,6 +192,9 @@ public final class QueryContextInformation implements Externalizable, Message<Qu
                 case 4:
                     message.sessionId = input.readString();
                     break;
+                case 5:
+                    message.capabilitiesVersion = input.readInt32();
+                    break;
                 default:
                     input.handleUnknownField(number, this);
             }   
@@ -197,6 +215,9 @@ public final class QueryContextInformation implements Externalizable, Message<Qu
 
         if(message.sessionId != null)
             output.writeString(4, message.sessionId, false);
+
+        if(message.capabilitiesVersion != DEFAULT_CAPABILITIES_VERSION)
+            output.writeInt32(5, message.capabilitiesVersion, false);
     }
 
     public String getFieldName(int number)
@@ -207,6 +228,7 @@ public final class QueryContextInformation implements Externalizable, Message<Qu
             case 2: return "timeZone";
             case 3: return "defaultSchemaName";
             case 4: return "sessionId";
+            case 5: return "capabilitiesVersion";
             default: return null;
         }
     }
@@ -224,6 +246,7 @@ public final class QueryContextInformation implements Externalizable, Message<Qu
         __fieldMap.put("timeZone", 2);
         __fieldMap.put("defaultSchemaName", 3);
         __fieldMap.put("sessionId", 4);
+        __fieldMap.put("capabilitiesVersion", 5);
     }
     
 }

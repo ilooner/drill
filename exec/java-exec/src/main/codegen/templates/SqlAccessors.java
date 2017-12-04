@@ -49,7 +49,11 @@ public class ${name}Accessor extends AbstractSqlAccessor {
   private final ${name}Vector.Accessor ac;
 
   public ${name}Accessor(${name}Vector vector) {
+  <#if mode == "Nullable" && minor.class == "VarChar">
+    this.ac = vector.getDelegateAccessor();
+  <#else>
     this.ac = vector.getAccessor();
+  </#if>
   }
 
   @Override

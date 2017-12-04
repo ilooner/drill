@@ -447,6 +447,8 @@ public final class SchemaUserProtos
 
                 if(message.hasSaslSupport())
                     output.writeEnum(9, message.getSaslSupport().getNumber(), false);
+                if(message.hasCapabilitiesVersion())
+                    output.writeInt32(10, message.getCapabilitiesVersion(), false);
             }
             public boolean isInitialized(org.apache.drill.exec.proto.UserProtos.UserToBitHandshake message)
             {
@@ -516,6 +518,9 @@ public final class SchemaUserProtos
                         case 9:
                             builder.setSaslSupport(org.apache.drill.exec.proto.UserProtos.SaslSupport.valueOf(input.readEnum()));
                             break;
+                        case 10:
+                            builder.setCapabilitiesVersion(input.readInt32());
+                            break;
                         default:
                             input.handleUnknownField(number, this);
                     }
@@ -565,6 +570,7 @@ public final class SchemaUserProtos
                 case 7: return "supportTimeout";
                 case 8: return "clientInfos";
                 case 9: return "saslSupport";
+                case 10: return "capabilitiesVersion";
                 default: return null;
             }
         }
@@ -585,6 +591,7 @@ public final class SchemaUserProtos
             fieldMap.put("supportTimeout", 7);
             fieldMap.put("clientInfos", 8);
             fieldMap.put("saslSupport", 9);
+            fieldMap.put("capabilitiesVersion", 10);
         }
     }
 

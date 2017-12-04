@@ -26,6 +26,8 @@ import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.common.map.CaseInsensitiveMap;
 import org.apache.drill.common.types.TypeProtos.MinorType;
 import org.apache.drill.common.types.Types;
+import org.apache.drill.exec.DrillCapabilities;
+import org.apache.drill.exec.ExecConstants;
 import org.apache.drill.exec.exception.OutOfMemoryException;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.expr.TypeHelper;
@@ -80,11 +82,13 @@ public class ScanBatch implements CloseableRecordBatch {
   private final BufferAllocator allocator;
   private final List<Map<String, String>> implicitColumnList;
   private String currentReaderClassName;
-
+  /** indicator to control the new implicit column optimization */
+  private final boolean optimizeImplColumns;
   private List<RecordReader> readerList = null; // needed for repeatable scanners
   private boolean isRepeatableScan = false;     // needed for repeatable scanners
 
   /**
+   * Scan operator used to drive Drill's scanners.
    *
    * @param context
    * @param oContext
@@ -95,18 +99,20 @@ public class ScanBatch implements CloseableRecordBatch {
   public ScanBatch(FragmentContext context,
                    OperatorContext oContext, List<RecordReader> readerList,
                    List<Map<String, String>> implicitColumnList) {
+
     this.context = context;
     this.readers = readerList.iterator();
     this.implicitColumns = implicitColumnList.iterator();
+
     if (!readers.hasNext()) {
       throw UserException.internalError(
-          new ExecutionSetupException("A scan batch must contain at least one reader."))
-        .build(logger);
+        new ExecutionSetupException("A scan batch must contain at least one reader.")).build(logger);
     }
 
     this.oContext = oContext;
     allocator = oContext.getAllocator();
-    mutator = new Mutator(oContext, allocator, container);
+    optimizeImplColumns = implicitColumnsOptEnabled(context);
+    mutator             = new Mutator(oContext, allocator, container, optimizeImplColumns);
 
     oContext.getStats().startProcessing();
     try {
@@ -205,13 +211,13 @@ public class ScanBatch implements CloseableRecordBatch {
   }
 
   private IterOutcome internalNext() throws Exception {
-    while (true) {
-      if (currentReader == null && !getNextReaderIfHas()) {
+      while (true) {
+        if (currentReader == null && !getNextReaderIfHas()) {
         logger.trace("currentReader is null");
         return cleanAndReturnNone();
-      }
-      injector.injectChecked(context.getExecutionControls(), "next-allocate", OutOfMemoryException.class);
-      currentReader.allocate(mutator.fieldVectorMap());
+        }
+        injector.injectChecked(context.getExecutionControls(), "next-allocate", OutOfMemoryException.class);
+        currentReader.allocate(mutator.fieldVectorMap());
 
       recordCount = currentReader.next();
       logger.trace("currentReader.next return recordCount={}", recordCount);
@@ -258,7 +264,7 @@ public class ScanBatch implements CloseableRecordBatch {
     oContext.getStats().startProcessing();
     try {
       return internalNext();
-    } catch (OutOfMemoryException ex) {
+    }  catch (OutOfMemoryException ex) {
       clearFieldVectorMap();
       throw UserException.memoryError(ex).build(logger);
     } catch (ExecutionSetupException e) {
@@ -277,6 +283,19 @@ public class ScanBatch implements CloseableRecordBatch {
     } finally {
       oContext.getStats().stopProcessing();
     }
+
+  }
+
+  private boolean implicitColumnsOptEnabled(FragmentContext context) {
+    if (context.getOptions().getOption(ExecConstants.SCAN_OPTIMIZED_IMPLICIT_COLUMNS).bool_val) {
+      // Enable this optimizations only if the client can handle it
+      int clientCapabilitiesVersion = context.getContextInformation().getCapabilitiesVersion();
+
+      if (clientCapabilitiesVersion > DrillCapabilities.Capabilities.OPTIMIZED_DUP_VALUES_VECTOR_V1.ordinal()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private void releaseAssets() {
@@ -317,8 +336,8 @@ public class ScanBatch implements CloseableRecordBatch {
     } catch(SchemaChangeException e) {
       // No exception should be thrown here.
       throw UserException.systemError(e)
-          .addContext("Failure while allocating implicit vectors")
-          .build(logger);
+        .addContext("Failure while allocating implicit vectors")
+        .build(logger);
     }
   }
 
@@ -381,13 +400,21 @@ public class ScanBatch implements CloseableRecordBatch {
     private final VectorContainer container;
 
     private final OperatorContext oContext;
+    /** indicator to control the new implicit column optimization */
+    private final boolean optimizeImplColumns;
 
     public Mutator(OperatorContext oContext, BufferAllocator allocator, VectorContainer container) {
+      this(oContext, allocator, container, false);
+    }
+
+    public Mutator(OperatorContext oContext, BufferAllocator allocator, VectorContainer container, boolean optimizeImplColumns) {
       this.oContext = oContext;
       this.allocator = allocator;
       this.container = container;
       this.schemaChanged = false;
+      this.optimizeImplColumns = optimizeImplColumns;
     }
+
 
     public Map<String, ValueVector> fieldVectorMap() {
       return regularFieldVectorMap;
@@ -496,6 +523,14 @@ public class ScanBatch implements CloseableRecordBatch {
     }
 
     private void populateImplicitVectors(Map<String, String> implicitValues, int recordCount) {
+      if (!optimizeImplColumns) {
+        populateImplicitVectorsOrig(implicitValues, recordCount);
+      } else {
+        populateImplicitVectorsOptimized(implicitValues, recordCount);
+      }
+    }
+
+    private void populateImplicitVectorsOrig(Map<String, String> implicitValues, int recordCount) {
       if (implicitValues != null) {
         for (Map.Entry<String, String> entry : implicitValues.entrySet()) {
           @SuppressWarnings("resource")
@@ -515,6 +550,30 @@ public class ScanBatch implements CloseableRecordBatch {
         }
       }
     }
+
+    private void populateImplicitVectorsOptimized(Map<String, String> implicitValues, int recordCount) {
+      if (implicitValues != null) {
+        for (Map.Entry<String, String> entry : implicitValues.entrySet()) {
+          @SuppressWarnings("resource")
+          final NullableVarCharVector v = (NullableVarCharVector) implicitFieldVectorMap.get(entry.getKey());
+          if (optimizeImplColumns) {
+            // Need to set it here as the clear() method will unset this optimization
+            v.setDuplicateValsOnly(true);
+          }
+          String val;
+          if ((val = entry.getValue()) != null) {
+            AllocationHelper.allocate(v, 1, val.length());
+            final byte[] bytes = val.getBytes();
+            v.getMutator().setSafe(0, bytes, 0, bytes.length);
+            v.getMutator().setValueCount(recordCount);
+          } else {
+            AllocationHelper.allocate(v, 1, 0);
+            v.getMutator().setValueCount(recordCount);
+          }
+        }
+      }
+    }
+
   }
 
 
