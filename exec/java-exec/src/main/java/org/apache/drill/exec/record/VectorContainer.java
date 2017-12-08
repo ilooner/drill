@@ -212,6 +212,23 @@ public class VectorContainer implements VectorAccessible {
     }
   }
 
+  /**
+    * This works with non-hyper {@link VectorContainer}s which have no selection vectors.
+    * Appends a row taken from a source {@link VectorContainer} to this {@link VectorContainer}.
+    * @param srcContainer The {@link VectorContainer} to copy a row from.
+    * @param srcIndex The index of the row to copy from the source {@link VectorContainer}.
+    */
+    public void appendRow(VectorContainer srcContainer, int srcIndex) {
+        for (int vectorIndex = 0; vectorIndex < wrappers.size(); vectorIndex++) {
+            ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
+            ValueVector srcVector = srcContainer.wrappers.get(vectorIndex).getValueVector();
+
+              destVector.copyEntry(recordCount, srcVector, srcIndex);
+          }
+
+          recordCount++;
+      }
+
   public TypedFieldId add(ValueVector vv) {
     schemaChanged = true;
     schema = null;

@@ -57,11 +57,13 @@ public interface HashTable {
 
   public void updateBatches() throws SchemaChangeException;
 
-  public int getHashCode(int incomingRowIdx) throws SchemaChangeException;
+  public int getBuildHashCode(int incomingRowIdx) throws SchemaChangeException;
+
+  public int getProbeHashCode(int incomingRowIdx) throws SchemaChangeException;
 
   public PutStatus put(int incomingRowIdx, IndexPointer htIdxHolder, int hashCode) throws SchemaChangeException, RetryAfterSpillException;
 
-  public int containsKey(int incomingRowIdx, boolean isProbe) throws SchemaChangeException;
+  public int probeForKey(int incomingRowIdx, int hashCode) throws SchemaChangeException;
 
   public void getStats(HashTableStats stats);
 

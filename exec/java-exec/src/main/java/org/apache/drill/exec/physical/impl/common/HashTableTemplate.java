@@ -577,8 +577,29 @@ public abstract class HashTableTemplate implements HashTable {
     throw new RetryAfterSpillException();
   }
 
-  public int getHashCode(int incomingRowIdx) throws SchemaChangeException {
+  /**
+   *   Return the Hash Value for the row in the Build incoming batch at index:
+   *   (For Hash Aggregate there's no "Build" side -- only one batch - this one)
+   *
+   * @param incomingRowIdx
+   * @return
+   * @throws SchemaChangeException
+   */
+  @Override
+  public int getBuildHashCode(int incomingRowIdx) throws SchemaChangeException {
     return getHashBuild(incomingRowIdx, 0);
+  }
+
+  /**
+   *   Return the Hash Value for the row in the Probe incoming batch at index:
+   *
+   * @param incomingRowIdx
+   * @return
+   * @throws SchemaChangeException
+   */
+  @Override
+  public int getProbeHashCode(int incomingRowIdx) throws SchemaChangeException {
+    return getHashProbe(incomingRowIdx, 0);
   }
 
   /** put() uses the hash code (from gethashCode() above) to insert the key(s) from the incoming
@@ -590,7 +611,7 @@ public abstract class HashTableTemplate implements HashTable {
    *
    * @param incomingRowIdx - position of the incoming row
    * @param htIdxHolder - to return batch + batch-offset (for caller to manage a matching batch)
-   * @param hashCode - computed over the key(s) by calling getHashCode()
+   * @param hashCode - computed over the key(s) by calling getBuildHashCode()
    * @return Status - the key(s) was ADDED or was already PRESENT
    */
   @Override
@@ -664,17 +685,24 @@ public abstract class HashTableTemplate implements HashTable {
         PutStatus.KEY_ADDED;     // otherwise
   }
 
-  // Return -1 if key is not found in the hash table. Otherwise, return the global index of the key
-  @Override
-  public int containsKey(int incomingRowIdx, boolean isProbe) throws SchemaChangeException {
-    int seedValue = 0;
-    int hash = isProbe ? getHashProbe(incomingRowIdx, seedValue) : getHashBuild(incomingRowIdx, seedValue);
-    int bucketIndex = getBucketIndex(hash, numBuckets());
+  /**
+   * Return -1 if Probe-side key is not found in the (build-side) hash table.
+   * Otherwise, return the global index of the key
+   *
+   *
+   * @param incomingRowIdx
+   * @param hashCode - The hash code for the Probe-side key
+   * @return -1 if key is not found, else return the global index of the key
+   * @throws SchemaChangeException
+   */
+   @Override
+  public int probeForKey(int incomingRowIdx, int hashCode) throws SchemaChangeException {
+    int bucketIndex = getBucketIndex(hashCode, numBuckets());
 
     for ( currentIdxHolder.value = startIndices.getAccessor().get(bucketIndex);
           currentIdxHolder.value != EMPTY_SLOT; ) {
       BatchHolder bh = batchHolders.get((currentIdxHolder.value >>> 16) & BATCH_MASK);
-      if (bh.isKeyMatch(incomingRowIdx, currentIdxHolder, isProbe)) {
+      if (bh.isKeyMatch(incomingRowIdx, currentIdxHolder, true /* isProbe */)) {
         return currentIdxHolder.value;
       }
     }

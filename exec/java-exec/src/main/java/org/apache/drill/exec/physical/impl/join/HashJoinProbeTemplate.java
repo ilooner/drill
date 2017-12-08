@@ -81,23 +81,34 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
   private List<Integer> unmatchedBuildIndexes = null;
 
   @Override
-  public void setupHashJoinProbe(FragmentContext context, VectorContainer buildBatch, RecordBatch probeBatch,
-                                 int probeRecordCount, HashJoinBatch outgoing, HashTable hashTable,
+  public void setupHashJoinProbe(FragmentContext context, VectorContainer buildBatch,
+                                 RecordBatch probeBatch, HashJoinBatch outgoing, HashTable hashTable,
                                  HashJoinHelper hjHelper, JoinRelType joinRelType) {
 
     this.probeBatch = probeBatch;
     this.probeSchema = probeBatch.getSchema();
     this.buildBatch = buildBatch;
     this.joinType = joinRelType;
-    this.recordsToProcess = probeRecordCount;
     this.hashTable = hashTable;
     this.hjHelper = hjHelper;
     this.outgoingJoinBatch = outgoing;
 
-    doSetup(context, buildBatch, probeBatch, outgoing);
+    // A special case - if the left was an empty file
+    if ( probeBatch.getContainer().getNumberOfColumns() == 0 ){
+      probeState = ProbeState.DONE; // avoid executing the probe
+      // If it is a RIGHT or a FULL join then get the indexes from the build side
+      if (joinType == JoinRelType.RIGHT || joinType == JoinRelType.FULL) {
+        probeState = ProbeState.PROJECT_RIGHT;
+      }
+    } else {
+       this.recordsToProcess = probeBatch.getRecordCount();
+    }
+
+    try { doSetup(context, buildBatch, probeBatch, outgoing); }
+    catch (SchemaChangeException sce) { throw new UnsupportedOperationException(sce);}
   }
 
-  public void executeProjectRightPhase() {
+  public void executeProjectRightPhase() throws SchemaChangeException {
     while (outputRecords < TARGET_RECORDS_PER_BATCH && recordsProcessed < recordsToProcess) {
       projectBuildRecord(unmatchedBuildIndexes.get(recordsProcessed), outputRecords);
       recordsProcessed++;
@@ -115,7 +126,6 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
         for (VectorWrapper<?> wrapper : probeBatch) {
           wrapper.getValueVector().clear();
         }
-
         IterOutcome leftUpstream = outgoingJoinBatch.next(HashJoinHelper.LEFT_INPUT, probeBatch);
 
         switch (leftUpstream) {
@@ -136,7 +146,7 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
           case OK_NEW_SCHEMA:
             if (probeBatch.getSchema().equals(probeSchema)) {
               doSetup(outgoingJoinBatch.getContext(), buildBatch, probeBatch, outgoingJoinBatch);
-              hashTable.updateBatches();
+              if (hashTable != null) { hashTable.updateBatches(); }
             } else {
               throw SchemaChangeException.schemaChanged("Hash join does not support schema changes in probe side.",
                   probeSchema,
@@ -156,7 +166,8 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
       // Check if we need to drain the next row in the probe side
       if (getNextRecord) {
         if (hashTable != null) {
-          probeIndex = hashTable.containsKey(recordsProcessed, true);
+          int hashCode = hashTable.getProbeHashCode(recordsProcessed);
+          probeIndex = hashTable.probeForKey(recordsProcessed, hashCode);
         }
 
           if (probeIndex != -1) {
@@ -243,9 +254,9 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
   }
 
   public abstract void doSetup(@Named("context") FragmentContext context, @Named("buildBatch") VectorContainer buildBatch, @Named("probeBatch") RecordBatch probeBatch,
-                               @Named("outgoing") RecordBatch outgoing);
-  public abstract void projectBuildRecord(@Named("buildIndex") int buildIndex, @Named("outIndex") int outIndex);
+                               @Named("outgoing") RecordBatch outgoing) throws SchemaChangeException;
+  public abstract void projectBuildRecord(@Named("buildIndex") int buildIndex, @Named("outIndex") int outIndex) throws SchemaChangeException;
 
-  public abstract void projectProbeRecord(@Named("probeIndex") int probeIndex, @Named("outIndex") int outIndex);
+  public abstract void projectProbeRecord(@Named("probeIndex") int probeIndex, @Named("outIndex") int outIndex) throws SchemaChangeException;
 
 }
