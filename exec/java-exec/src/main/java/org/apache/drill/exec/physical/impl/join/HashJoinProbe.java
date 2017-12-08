@@ -44,11 +44,9 @@ public interface HashJoinProbe {
     PROBE_PROJECT, PROJECT_RIGHT, DONE
   }
 
-  public abstract void setupHashJoinProbe(FragmentContext context, VectorContainer buildBatch, RecordBatch probeBatch,
-                                          int probeRecordCount, HashJoinBatch outgoing, HashTable hashTable, HashJoinHelper hjHelper,
-                                          JoinRelType joinRelType);
-  public abstract void doSetup(FragmentContext context, VectorContainer buildBatch, RecordBatch probeBatch, RecordBatch outgoing);
+  public abstract void setupHashJoinProbe(FragmentContext context, VectorContainer buildBatch, RecordBatch probeBatch, HashJoinBatch outgoing, HashTable hashTable, HashJoinHelper hjHelper, JoinRelType joinRelType);
+  public abstract void doSetup(FragmentContext context, VectorContainer buildBatch, RecordBatch probeBatch, RecordBatch outgoing) throws SchemaChangeException;
   public abstract int  probeAndProject() throws SchemaChangeException, ClassTransformationException, IOException;
-  public abstract void projectBuildRecord(int buildIndex, int outIndex);
-  public abstract void projectProbeRecord(int probeIndex, int outIndex);
+  public abstract void projectBuildRecord(int buildIndex, int outIndex) throws SchemaChangeException;
+  public abstract void projectProbeRecord(int probeIndex, int outIndex) throws SchemaChangeException;
 }
