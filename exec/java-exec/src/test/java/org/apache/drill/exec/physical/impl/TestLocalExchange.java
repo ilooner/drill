@@ -209,7 +209,7 @@ public class TestLocalExchange extends PlanTestBase {
       testBuilder.baselineValues(new Object[] { (long)i, (long)0, (long)0, (long)numOccurrances});
     }
 
-    testBuilder.go();
+          testBuilder.go();
   }
 
   @Test

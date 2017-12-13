@@ -24,6 +24,8 @@ import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.VectorContainer;
 import org.apache.drill.common.exceptions.RetryAfterSpillException;
 
+import java.util.Map;
+
 public interface HashTable {
   TemplateClassDefinition<HashTable> TEMPLATE_DEFINITION =
       new TemplateClassDefinition<>(HashTable.class, HashTableTemplate.class);
@@ -125,6 +127,8 @@ public interface HashTable {
    * Clears all the memory used by the {@link HashTable} and re-initializes it.
    */
   void reset();
+
+  void setKeySizes(Map<String, Integer> keySizes);
 
   /**
    * Retrieves the key columns and transfers them to the output container. Note this operation removes the key columns from the {@link HashTable}.

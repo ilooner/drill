@@ -24,6 +24,11 @@ import java.util.Set;
 import javax.inject.Named;
 
 import com.google.common.collect.Sets;
+import java.util.Map;
+
+import com.google.common.base.Preconditions;
+import org.apache.drill.common.map.CaseInsensitiveMap;
+import org.apache.drill.common.types.TypeProtos;
 import org.apache.drill.common.types.TypeProtos.MinorType;
 import org.apache.drill.common.types.Types;
 import org.apache.drill.exec.compile.sig.RuntimeOverridden;
@@ -52,6 +57,13 @@ public abstract class HashTableTemplate implements HashTable {
 
   private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(HashTable.class);
   private static final boolean EXTRA_DEBUG = false;
+
+  // startIndices, hashValues, and links overhead
+  public static final int ENTRY_OVERHEAD_BYTES =
+    TypeHelper.getSize(TypeProtos.MajorType.newBuilder().setMinorType(MinorType.INT).build()) * 3;
+
+  // TODO remove these defaults. We should require key sizes to be specified.
+  private static final int DEFAULT_VAR_CHAR_SIZE = 8;
 
   private static final int EMPTY_SLOT = -1;
 
@@ -111,6 +123,8 @@ public abstract class HashTableTemplate implements HashTable {
 
   private int resizingTime = 0;
 
+  private Map<String, Integer> keySizes; // for varchar allocation
+
   // This class encapsulates the links, keys and values for up to BATCH_SIZE
   // *unique* records. Thus, suppose there are N incoming record batches, each
   // of size BATCH_SIZE..but they have M unique keys altogether, the number of
@@ -127,7 +141,6 @@ public abstract class HashTableTemplate implements HashTable {
     private IntVector hashValues;
 
     private int maxOccupiedIdx = -1;
-//    private int batchOutputCount = 0;
 
     private int batchIndex = 0;
 
@@ -139,7 +152,8 @@ public abstract class HashTableTemplate implements HashTable {
       boolean success = false;
       try {
         for (VectorWrapper<?> w : htContainerOrig) {
-          ValueVector vv = TypeHelper.getNewVector(w.getField(), allocator);
+          final ValueVector vv = TypeHelper.getNewVector(w.getField(), allocator);
+          final String name = vv.getField().getName();
           htContainer.add(vv); // add to container before actual allocation (to allow clearing in case of an OOM)
 
           // Capacity for "hashValues" and "links" vectors is newBatchHolderSize records. It is better to allocate space for
@@ -150,6 +164,7 @@ public abstract class HashTableTemplate implements HashTable {
           if (vv instanceof FixedWidthVector) {
             ((FixedWidthVector) vv).allocateNew(newBatchHolderSize);
           } else if (vv instanceof VariableWidthVector) {
+            final int keySize = getKeySize(name, DEFAULT_VAR_CHAR_SIZE);
             long beforeMem = allocator.getAllocatedMemory();
             ((VariableWidthVector) vv).allocateNew(MAX_VARCHAR_SIZE * newBatchHolderSize, newBatchHolderSize);
             logger.trace("HT allocated {} for varchar of max width {}",allocator.getAllocatedMemory() - beforeMem, MAX_VARCHAR_SIZE);
@@ -167,6 +182,22 @@ public abstract class HashTableTemplate implements HashTable {
           if (links != null) { links.clear();}
         }
       }
+    }
+
+    private int getKeySize(final String name, final int defaultSize)
+    {
+      if (keySizes == null) {
+        return defaultSize;
+      }
+
+      final Integer size = keySizes.get(name);
+
+      if (size == null) {
+        final String message = String.format(keySizes + " Could not find size for column %s", name);
+        throw new IllegalStateException(message);
+      }
+
+      return size;
     }
 
     private void init(IntVector links, IntVector hashValues, int size) {
@@ -858,6 +889,14 @@ public abstract class HashTableTemplate implements HashTable {
     }
     vector.getMutator().setValueCount(size);
     return vector;
+  }
+
+  @Override
+  public void setKeySizes(Map<String, Integer> keySizes) {
+    Preconditions.checkNotNull(keySizes);
+
+    this.keySizes = CaseInsensitiveMap.newHashMap();
+    this.keySizes.putAll(keySizes);
   }
 
   // These methods will be code-generated in the context of the outer class
