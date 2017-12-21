@@ -44,7 +44,8 @@ public class VectorContainer implements VectorAccessible {
 
   protected final List<VectorWrapper<?>> wrappers = Lists.newArrayList();
   private BatchSchema schema;
-  private int recordCount = -1;
+  private int recordCount = 0;
+  private boolean initialized = false;
   private BufferAllocator allocator;
   private boolean schemaChanged = true; // Schema has changed since last built. Must rebuild schema
 
@@ -217,17 +218,64 @@ public class VectorContainer implements VectorAccessible {
     * Appends a row taken from a source {@link VectorContainer} to this {@link VectorContainer}.
     * @param srcContainer The {@link VectorContainer} to copy a row from.
     * @param srcIndex The index of the row to copy from the source {@link VectorContainer}.
+    * @return Number of records in the container after appending
     */
-    public void appendRow(VectorContainer srcContainer, int srcIndex) {
-        for (int vectorIndex = 0; vectorIndex < wrappers.size(); vectorIndex++) {
-            ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
-            ValueVector srcVector = srcContainer.wrappers.get(vectorIndex).getValueVector();
-
-              destVector.copyEntry(recordCount, srcVector, srcIndex);
-          }
-
-          recordCount++;
+    public int appendRow(VectorContainer srcContainer, int srcIndex) {
+      for (int vectorIndex = 0; vectorIndex < wrappers.size(); vectorIndex++) {
+        ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
+        ValueVector srcVector = srcContainer.wrappers.get(vectorIndex).getValueVector();
+        destVector.copyEntry(recordCount, srcVector, srcIndex);
       }
+      recordCount++;
+      initialized = true;
+      return recordCount;
+    }
+
+  /**
+   *  This method currently is only used by the Hash Join to return a row composed of build+probe rows
+   *
+   * This works with non-hyper {@link VectorContainer}s which have no selection vectors.
+   * Appends a row taken from two source {@link VectorContainer}s to this {@link VectorContainer}.
+   * @param buildSrcContainer The {@link VectorContainer} to copy the first columns of a row from.
+   * @param buildSrcIndex The index of the row to copy from the build side source {@link VectorContainer}.
+   * @param probeSrcContainer The {@link VectorContainer} to copy the last columns of a row from.
+   * @param probeSrcIndex The index of the row to copy from the probe side source {@link VectorContainer}.
+   * @return Number of records in the container after appending
+   */
+  public int appendRow(VectorContainer buildSrcContainer, int buildSrcIndex, VectorContainer probeSrcContainer, int probeSrcIndex) {
+    if ( buildSrcContainer != null ) {
+      for (int vectorIndex = 0; vectorIndex < buildSrcContainer.wrappers.size(); vectorIndex++) {
+        ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
+        ValueVector srcVector = buildSrcContainer.wrappers.get(vectorIndex).getValueVector();
+        destVector.copyEntry(recordCount, srcVector, buildSrcIndex);
+      }
+    }
+    if ( probeSrcContainer != null ) {
+      int baseIndex = wrappers.size() - probeSrcContainer.wrappers.size();
+      for (int vectorIndex = baseIndex; vectorIndex < wrappers.size(); vectorIndex++) {
+        ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
+        ValueVector srcVector = probeSrcContainer.wrappers.get(vectorIndex).getValueVector();
+        destVector.copyEntry(recordCount, srcVector, probeSrcIndex);
+      }
+    }
+    recordCount++;
+    initialized = true;
+    return recordCount;
+  }
+
+  /**
+   *  A special version of appendRow for the HashJoin; uses a composite index for the build side
+   * @param buildSrcContainer Must not be null
+   * @param compositeBuildSrcIndex
+   * @param probeSrcContainer
+   * @param probeSrcIndex
+   * @return
+   */
+  public int appendRow(VectorContainer buildSrcContainer[], int compositeBuildSrcIndex, VectorContainer probeSrcContainer, int probeSrcIndex) {
+    int buildBatch = compositeBuildSrcIndex >>> 16;
+    int buildOffset = compositeBuildSrcIndex & 65535;
+        return appendRow(buildSrcContainer[buildBatch], buildOffset, probeSrcContainer, probeSrcIndex);
+  }
 
   public TypedFieldId add(ValueVector vv) {
     schemaChanged = true;
@@ -359,7 +407,8 @@ public class VectorContainer implements VectorAccessible {
   }
 
   public void setRecordCount(int recordCount) {
-    this.recordCount = recordCount;
+      this.recordCount = recordCount;
+      initialized = true;
   }
 
   @Override
@@ -368,7 +417,7 @@ public class VectorContainer implements VectorAccessible {
     return recordCount;
   }
 
-  public boolean hasRecordCount() { return recordCount != -1; }
+  public boolean hasRecordCount() { return initialized; }
 
   @Override
   public SelectionVector2 getSelectionVector2() {
