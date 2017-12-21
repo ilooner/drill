@@ -203,8 +203,6 @@ public abstract class HashAggTemplate implements HashAggregator {
     private int maxOccupiedIdx = -1;
     private int batchOutputCount = 0;
 
-    private int capacity = Integer.MAX_VALUE;
-
     @SuppressWarnings("resource")
     public BatchHolder() {
 
@@ -234,8 +232,6 @@ public abstract class HashAggTemplate implements HashAggregator {
           } else {
             vector.allocateNew();
           }
-
-          capacity = Math.min(capacity, vector.getValueCapacity());
 
           aggrValuesContainer.add(vector);
         }
