@@ -80,6 +80,10 @@ public class PlannerSettings implements Context{
   public static final BooleanValidator ENABLE_DECIMAL_DATA_TYPE = new BooleanValidator(ENABLE_DECIMAL_DATA_TYPE_KEY);
   public static final OptionValidator HEP_OPT = new BooleanValidator("planner.enable_hep_opt");
   public static final OptionValidator HEP_PARTITION_PRUNING = new BooleanValidator("planner.enable_hep_partition_pruning");
+  public static final OptionValidator ROWKEYJOIN_CONVERSION = new BooleanValidator("planner.enable_rowkeyjoin_conversion");
+  public static final RangeDoubleValidator ROWKEYJOIN_CONVERSION_SELECTIVITY_THRESHOLD =
+      new RangeDoubleValidator("planner.rowkeyjoin_conversion_selectivity_threshold", 0.0, 1.0);
+  public static final OptionValidator ROWKEYJOIN_CONVERSION_USING_HASHJOIN = new BooleanValidator("planner.rowkeyjoin_conversion_using_hashjoin");
   public static final OptionValidator PLANNER_MEMORY_LIMIT = new RangeLongValidator("planner.memory_limit",
       INITIAL_OFF_HEAP_ALLOCATION_IN_BYTES, MAX_OFF_HEAP_ALLOCATION_IN_BYTES);
   public static final String UNIONALL_DISTRIBUTE_KEY = "planner.enable_unionall_distribute";
@@ -253,6 +257,12 @@ public class PlannerSettings implements Context{
   }
 
   public boolean isHepPartitionPruningEnabled() { return options.getOption(HEP_PARTITION_PRUNING.getOptionName()).bool_val;}
+
+  public boolean isRowKeyJoinConversionEnabled() { return options.getOption(ROWKEYJOIN_CONVERSION.getOptionName()).bool_val;}
+
+  public boolean isRowKeyJoinConversionUsingHashJoin() { return options.getOption(ROWKEYJOIN_CONVERSION_USING_HASHJOIN.getOptionName()).bool_val;}
+
+  public double getRowKeyJoinConversionSelThreshold() { return options.getOption(ROWKEYJOIN_CONVERSION_SELECTIVITY_THRESHOLD);}
 
   public boolean isHepOptEnabled() { return options.getOption(HEP_OPT.getOptionName()).bool_val;}
 
