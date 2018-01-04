@@ -19,8 +19,6 @@ package org.apache.drill.exec.record;
 
 import java.lang.reflect.Array;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -218,7 +216,7 @@ public class VectorContainer implements VectorAccessible {
     * Appends a row taken from a source {@link VectorContainer} to this {@link VectorContainer}.
     * @param srcContainer The {@link VectorContainer} to copy a row from.
     * @param srcIndex The index of the row to copy from the source {@link VectorContainer}.
-    * @return Number of records in the container after appending
+    * @return Position where the row was appended
     */
     public int appendRow(VectorContainer srcContainer, int srcIndex) {
       for (int vectorIndex = 0; vectorIndex < wrappers.size(); vectorIndex++) {
@@ -226,9 +224,9 @@ public class VectorContainer implements VectorAccessible {
         ValueVector srcVector = srcContainer.wrappers.get(vectorIndex).getValueVector();
         destVector.copyEntry(recordCount, srcVector, srcIndex);
       }
-      recordCount++;
+      int pos = recordCount++;
       initialized = true;
-      return recordCount;
+      return pos;
     }
 
   /**
@@ -242,7 +240,7 @@ public class VectorContainer implements VectorAccessible {
    * @param probeSrcIndex The index of the row to copy from the probe side source {@link VectorContainer}.
    * @return Number of records in the container after appending
    */
-  public int appendRow(VectorContainer buildSrcContainer, int buildSrcIndex, VectorContainer probeSrcContainer, int probeSrcIndex) {
+  public int appendRowXXX(VectorContainer buildSrcContainer, int buildSrcIndex, VectorContainer probeSrcContainer, int probeSrcIndex) {
     if ( buildSrcContainer != null ) {
       for (int vectorIndex = 0; vectorIndex < buildSrcContainer.wrappers.size(); vectorIndex++) {
         ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
@@ -263,18 +261,38 @@ public class VectorContainer implements VectorAccessible {
     return recordCount;
   }
 
+  private void appendBuild(VectorContainer buildSrcContainer, int buildSrcIndex) {
+    // "- 1" to skip the last "hash values" added column
+    for (int vectorIndex = 0; vectorIndex < buildSrcContainer.wrappers.size() - 1; vectorIndex++) {
+      ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
+      ValueVector srcVector = buildSrcContainer.wrappers.get(vectorIndex).getValueVector();
+      destVector.copyEntry(recordCount, srcVector, buildSrcIndex);
+    }
+  }
+  private void appendProbe(VectorContainer probeSrcContainer, int probeSrcIndex) {
+      int baseIndex = wrappers.size() - probeSrcContainer.wrappers.size();
+      for (int vectorIndex = baseIndex; vectorIndex < wrappers.size(); vectorIndex++) {
+        ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
+        ValueVector srcVector = probeSrcContainer.wrappers.get(vectorIndex).getValueVector();
+        destVector.copyEntry(recordCount, srcVector, probeSrcIndex);
+      }
+  }
   /**
    *  A special version of appendRow for the HashJoin; uses a composite index for the build side
-   * @param buildSrcContainer Must not be null
+   * @param buildSrcContainers Must not be null
    * @param compositeBuildSrcIndex
    * @param probeSrcContainer
    * @param probeSrcIndex
    * @return
    */
-  public int appendRow(VectorContainer buildSrcContainer[], int compositeBuildSrcIndex, VectorContainer probeSrcContainer, int probeSrcIndex) {
+  public int appendRow(ArrayList<VectorContainer> buildSrcContainers, int compositeBuildSrcIndex, VectorContainer probeSrcContainer, int probeSrcIndex) {
     int buildBatch = compositeBuildSrcIndex >>> 16;
     int buildOffset = compositeBuildSrcIndex & 65535;
-        return appendRow(buildSrcContainer[buildBatch], buildOffset, probeSrcContainer, probeSrcIndex);
+    if ( buildSrcContainers != null ) { appendBuild(buildSrcContainers.get(buildBatch), buildOffset); }
+    if ( probeSrcContainer != null ) { appendProbe(probeSrcContainer, probeSrcIndex); }
+    recordCount++;
+    initialized = true;
+    return recordCount;
   }
 
   public TypedFieldId add(ValueVector vv) {
