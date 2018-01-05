@@ -464,6 +464,15 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     VectorContainer currentBatches[] = new VectorContainer[numPartitions];
     IntVector HV_vectors[] = new IntVector[numPartitions];
     int HVindex = 0;
+    // initialize partition's batches and hash-value vectors
+    for (int i = 0; i < numPartitions; i++) {
+      if ( currentBatches[i] == null ) { currentBatches[i] = allocateNewVectorContainer(right); }
+      if ( HV_vectors[i] == null ) {
+        HV_vectors[i] = new IntVector(MaterializedField.create("Hash_Values", HVtype), allocator);
+        HV_vectors[i].allocateNew(HashTable.BATCH_SIZE);
+      }
+    }
+    buildSideIsEmpty = false;
 
     boolean moreData = true;
 
@@ -496,15 +505,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           }
           hashTables[0].updateBatches();
         }
-        // initialize partition's batches and hash-value vectors
-        for (int i = 0; i < numPartitions; i++) {
-          if ( currentBatches[i] == null ) { currentBatches[i] = allocateNewVectorContainer(right); }
-          if ( HV_vectors[i] == null ) {
-            HV_vectors[i] = new IntVector(MaterializedField.create("Hash_Values", HVtype), allocator);
-            HV_vectors[i].allocateNew(HashTable.BATCH_SIZE);
-          }
-        }
-        buildSideIsEmpty = false;
+
         // Fall through
       case OK:
         final int currentRecordCount = right.getRecordCount();
@@ -614,14 +615,10 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   public HashJoinProbe setupHashJoinProbe() throws ClassTransformationException, IOException {
     final CodeGenerator<HashJoinProbe> cg = CodeGenerator.get(HashJoinProbe.TEMPLATE_DEFINITION, context.getOptions());
     cg.plainJavaCapable(true);
-    cg.saveCodeForDebugging(true);
-    final HashJoinProbe hj1 = context.getImplementationClass(cg);
-    return hj1;
 
-  }
     // Uncomment out this line to debug the generated code.
-    // cg.saveCodeForDebugging(true);
-   // final ClassGenerator<HashJoinProbe> g = cg.getRoot();
+    cg.saveCodeForDebugging(true);
+    final ClassGenerator<HashJoinProbe> g = cg.getRoot();
 
     // Generate the code to project build side records
     //g.setMappingSet(projectBuildMapping);
@@ -631,23 +628,23 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     //final JExpression outIndex = JExpr.direct("outIndex");
     //g.rotateBlock();
 
-    //if (rightSchema != null) {
-     // for (final MaterializedField field : rightSchema) {
-       // final MajorType inputType = field.getType();
-       // final MajorType outputType;
+    if (rightSchema != null) {
+      for (final MaterializedField field : rightSchema) {
+        final MajorType inputType = field.getType();
+        final MajorType outputType;
         // If left or full outer join, then the output type must be nullable. However, map types are
         // not nullable so we must exclude them from the check below (see DRILL-2197).
-      //  if ((joinType == JoinRelType.LEFT || joinType == JoinRelType.FULL) && inputType.getMode() == DataMode.REQUIRED
-      //      && inputType.getMinorType() != TypeProtos.MinorType.MAP) {
-      //    outputType = Types.overrideMode(inputType, DataMode.OPTIONAL);
-      //  } else {
-      //    outputType = inputType;
-      //  }
+        if ((joinType == JoinRelType.LEFT || joinType == JoinRelType.FULL) && inputType.getMode() == DataMode.REQUIRED
+            && inputType.getMinorType() != TypeProtos.MinorType.MAP) {
+          outputType = Types.overrideMode(inputType, DataMode.OPTIONAL);
+        } else {
+          outputType = inputType;
+        }
 
         // make sure to project field with children for children to show up in the schema
-      //  final MaterializedField projected = field.withType(outputType);
+        final MaterializedField projected = field.withType(outputType);
         // Add the vector to our output container
-       // container.addOrGet(projected);
+        container.addOrGet(projected);
 
        // final JVar inVV = g.declareVectorValueSetupAndMember("buildBatch", new TypedFieldId(field.getType(), true, fieldId));
        // final JVar outVV = g.declareVectorValueSetupAndMember("outgoing", new TypedFieldId(outputType, false, fieldId));
@@ -657,8 +654,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
        //     .arg(inVV.component(buildIndex.shrz(JExpr.lit(16)))));
        // g.rotateBlock();
        // fieldId++;
-     // }
-   // }
+      }
+    }
 
     // Generate the code to project probe side records
     //g.setMappingSet(projectProbeMapping);
@@ -667,25 +664,25 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     //fieldId = 0;
     //final JExpression probeIndex = JExpr.direct("probeIndex");
 
-    //if (leftUpstream == IterOutcome.OK || leftUpstream == IterOutcome.OK_NEW_SCHEMA) {
-      //for (final VectorWrapper<?> vv : left) {
-        //final MajorType inputType = vv.getField().getType();
-        //final MajorType outputType;
+    if (leftUpstream == IterOutcome.OK || leftUpstream == IterOutcome.OK_NEW_SCHEMA) {
+      for (final VectorWrapper<?> vv : left) {
+        final MajorType inputType = vv.getField().getType();
+        final MajorType outputType;
 
         // If right or full outer join then the output type should be optional. However, map types are
         // not nullable so we must exclude them from the check below (see DRILL-2771, DRILL-2197).
-        //if ((joinType == JoinRelType.RIGHT || joinType == JoinRelType.FULL) && inputType.getMode() == DataMode.REQUIRED
-        //    && inputType.getMinorType() != TypeProtos.MinorType.MAP) {
-        //  outputType = Types.overrideMode(inputType, DataMode.OPTIONAL);
-        //} else {
-        //  outputType = inputType;
-        //}
+        if ((joinType == JoinRelType.RIGHT || joinType == JoinRelType.FULL) && inputType.getMode() == DataMode.REQUIRED
+            && inputType.getMinorType() != TypeProtos.MinorType.MAP) {
+          outputType = Types.overrideMode(inputType, DataMode.OPTIONAL);
+        } else {
+          outputType = inputType;
+        }
 
-        //final ValueVector v = container.addOrGet(MaterializedField.create(vv.getField().getName(), outputType));
-        //if (v instanceof AbstractContainerVector) {
-        //  vv.getValueVector().makeTransferPair(v);
-        //  v.clear();
-        //}
+        final ValueVector v = container.addOrGet(MaterializedField.create(vv.getField().getName(), outputType));
+        if (v instanceof AbstractContainerVector) {
+          vv.getValueVector().makeTransferPair(v);
+          v.clear();
+        }
 
         //final JVar inVV = g.declareVectorValueSetupAndMember("probeBatch", new TypedFieldId(inputType, false, fieldId));
         //final JVar outVV = g.declareVectorValueSetupAndMember("outgoing", new TypedFieldId(outputType, false, outputFieldId));
@@ -694,12 +691,12 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         //g.rotateBlock();
         //fieldId++;
         //outputFieldId++;
-      //}
-    //}
+      }
+    }
 
-    //final HashJoinProbe hj = context.getImplementationClass(cg);
-    //return hj;
-  //}
+    final HashJoinProbe hj = context.getImplementationClass(cg);
+    return hj;
+  }
 
   private void allocateVectors() {
     for (final VectorWrapper<?> v : container) {
@@ -777,16 +774,18 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       //if (hyperContainers[part] != null) {
       //  hyperContainers[part].clear();
       //}
-      if ( batchCount != null && partitionContainers.get(part) != null ) {
-         for (int i = 0; i < batchCount[part]; i++) { partitionContainers.get(part).get(i).clear(); }
-         partitionContainers.get(part).clear();
+      ArrayList<VectorContainer> thisPart = partitionContainers.get(part) ;
+      if ( batchCount != null && thisPart != null ) {
+         for (int i = 0; i < batchCount[part]; i++) { thisPart.get(i).clear(); }
+         thisPart.clear();
       }
-      partitionContainers.clear();
 
       if (hashTables[part] != null) {
         hashTables[part].clear();
       }
     }
+    partitionContainers.clear();
+
     super.close();
   }
 }

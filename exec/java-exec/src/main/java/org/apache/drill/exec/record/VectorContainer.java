@@ -273,7 +273,7 @@ public class VectorContainer implements VectorAccessible {
       int baseIndex = wrappers.size() - probeSrcContainer.wrappers.size();
       for (int vectorIndex = baseIndex; vectorIndex < wrappers.size(); vectorIndex++) {
         ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
-        ValueVector srcVector = probeSrcContainer.wrappers.get(vectorIndex).getValueVector();
+        ValueVector srcVector = probeSrcContainer.wrappers.get(vectorIndex - baseIndex).getValueVector();
         destVector.copyEntry(recordCount, srcVector, probeSrcIndex);
       }
   }
