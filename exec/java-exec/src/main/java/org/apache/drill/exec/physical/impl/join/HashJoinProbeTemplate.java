@@ -79,6 +79,10 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
   // For outer or right joins, this is a list of unmatched records that needs to be projected
   private List<Integer> unmatchedBuildIndexes = null;
 
+  // While probing duplicates, retain current build-side partition and hj helper
+  int currBuildPart = 0;
+  HashJoinHelper currHJHelper = null; // for the current partition
+
   public void setupHashJoinProbe(ArrayList<ArrayList<VectorContainer>> buildBatches, RecordBatch probeBatch, HashJoinBatch outgoing,
                                  HashTable[] hashTables, HashJoinHelper[] hjHelpers, JoinRelType joinRelType, int numPartitions) {
 
@@ -155,8 +159,6 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
         }
       }
       int probeIndex = -1;
-      int currBuildPart = 0;
-      HashJoinHelper currHJHelper = null; // for the current partition
 
       // Check if we need to drain the next row in the probe side
       if (getNextRecord) {
