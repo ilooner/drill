@@ -497,6 +497,7 @@ public class VectorContainer implements VectorAccessible {
     merged.wrappers.addAll(wrappers);
     merged.wrappers.addAll(otherContainer.wrappers);
     merged.schemaChanged = false;
+    merged.initialized = true;
     return merged;
   }
 }
