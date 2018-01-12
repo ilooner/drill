@@ -381,8 +381,9 @@ public final class ${className} extends BaseDataValueVector implements <#if type
 
   @Override
   public void copyEntry(int toIndex, ValueVector from, int fromIndex) {
+    <#if type.major == "VarLen">
     mutator.fillEmpties(toIndex);
-
+    </#if>
     // Handle the case of not-nullable copied into a nullable
     if ( from instanceof ${minor.class}Vector ) {
       bits.getMutator().set(toIndex, 1);
