@@ -72,5 +72,5 @@
     } ]
   } ],
   "directories" : [ ],
-  "drillVersion" : "1.12.0-SNAPSHOT"
+  "drillVersion" : "1.13.0-SNAPSHOT"
 }
