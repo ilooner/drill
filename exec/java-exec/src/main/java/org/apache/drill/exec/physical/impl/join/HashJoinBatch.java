@@ -656,6 +656,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   }
 
   private void updateStats(HashTable[] htables) {
+    if ( htables == null ) { return; } // no stats when the right side is empty
     long numSpilled = 0;
     HashTableStats newStats = new HashTableStats();
     // sum the stats from all the partitions
