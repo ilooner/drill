@@ -56,7 +56,7 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
   private HashTable hashTables[] = null;
   private HashJoinHelper hjHelpers[] = null; // complements each hash table
 
-  int nextRightPartition = 0; // for returning RIGHT/FULL
+  int currRightPartition = 0; // for returning RIGHT/FULL
 
   // Number of records to process on the probe side
   private int recordsToProcess = 0;
@@ -103,16 +103,12 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
     } else {
        this.recordsToProcess = probeBatch.getRecordCount();
     }
-
-    // try { doSetup(context, buildBatch, probeBatch, outgoing); }
-    // catch (SchemaChangeException sce) { throw new UnsupportedOperationException(sce);}
   }
 
   private void executeProjectRightPhase(int currBuildPart) throws SchemaChangeException {
     while (outputRecords < TARGET_RECORDS_PER_BATCH && recordsProcessed < recordsToProcess) {
-      // projectBuildRecord(unmatchedBuildIndexes.get(recordsProcessed), outputRecords);
       outputRecords =
-        outgoingJoinBatch.getContainer().appendRow(buildBatches.get(currBuildPart), currentCompositeIdx,
+        outgoingJoinBatch.getContainer().appendRow(buildBatches.get(currBuildPart), unmatchedBuildIndexes.get(recordsProcessed),
           null /* no probeBatch */, 0 /* no probe index */ );
       recordsProcessed++;
     }
@@ -183,12 +179,9 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
              */
             currHJHelper.setRecordMatched(currentCompositeIdx);
 
-            //projectBuildRecord(currentCompositeIdx, outputRecords);
-            //projectProbeRecord(recordsProcessed, outputRecords);
-            //outputRecords++;
-             outputRecords =
+            outputRecords =
                outgoingJoinBatch.getContainer().appendRow(buildBatches.get(currBuildPart), currentCompositeIdx,
-                                                           probeBatch.getContainer(), recordsProcessed);
+                 probeBatch.getContainer(), recordsProcessed);
 
             /* Projected single row from the build side with matching key but there
              * may be more rows with the same key. Check if that's the case
@@ -208,10 +201,9 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
             }
         } else { // No matching key
 
-            // If we have a left outer join, project the keys
+            // If we have a left outer join, project the outer side
             if (joinType == JoinRelType.LEFT || joinType == JoinRelType.FULL) {
-              // projectProbeRecord(recordsProcessed, outputRecords);
-              // outputRecords++;
+
               outputRecords =
                 outgoingJoinBatch.getContainer().appendRow(null, 0 , probeBatch.getContainer(), recordsProcessed);
             }
@@ -219,9 +211,7 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
         }
       } else {
         currHJHelper.setRecordMatched(currentCompositeIdx);
-        //projectBuildRecord(currentCompositeIdx, outputRecords);
-        //projectProbeRecord(recordsProcessed, outputRecords);
-        //outputRecords++;
+
         outputRecords =
           outgoingJoinBatch.getContainer().appendRow(buildBatches.get(currBuildPart), currentCompositeIdx,
             probeBatch.getContainer(), recordsProcessed);
@@ -246,34 +236,30 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
     }
 
     if (probeState == ProbeState.PROJECT_RIGHT) {
+      // Inner probe is done; now we are here because we still have a RIGHT OUTER (or a FULL) join
 
-      // We are here because we have a RIGHT OUTER or a FULL join
-      if (unmatchedBuildIndexes == null) { // first time ?
-        nextRightPartition = 0; // start at the first partition
-        recordsProcessed = 0;
-        recordsToProcess = 0;
-      }
+      do {
 
-      // Loop over all (in memory) inner partitions
-      while ( nextRightPartition < numPartitions ) {
-        if ( recordsToProcess == recordsProcessed ) {
-          // Get the next partition's list of build indexes that didn't match a record on the probe side
-          unmatchedBuildIndexes = hjHelpers[nextRightPartition].getNextUnmatchedIndex();
-          recordsToProcess = unmatchedBuildIndexes.size();
+        if (unmatchedBuildIndexes == null) { // first time for this partition ?
+          // Get this partition's list of build indexes that didn't match any record on the probe side
+          unmatchedBuildIndexes = hjHelpers[currRightPartition].getNextUnmatchedIndex();
           recordsProcessed = 0;
+          recordsToProcess = unmatchedBuildIndexes.size();
         }
 
         // Project the list of unmatched records on the build side
-        executeProjectRightPhase(nextRightPartition);
+        executeProjectRightPhase(currRightPartition);
 
-        if ( recordsProcessed < recordsToProcess ) { // there are more
-          return outputRecords;  // outgoing is full
+        if ( recordsProcessed < recordsToProcess ) { // more records in this partition?
+          return outputRecords;  // outgoing is full; report and come back later
         } else {
-          nextRightPartition++; // on to the next right partition
+          currRightPartition++; // on to the next right partition
+          unmatchedBuildIndexes = null;
         }
-      }
 
+      }   while ( currRightPartition < numPartitions );
 
+      probeState = ProbeState.DONE; // last right partition was handled; we are done now
     }
 
     return outputRecords;
@@ -291,10 +277,4 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
     return ProbeState.DONE;
   }
 
-  //public abstract void doSetup(@Named("context") FragmentContext context, @Named("buildBatch") VectorContainer buildBatch, @Named("probeBatch") RecordBatch probeBatch,
-    //                           @Named("outgoing") RecordBatch outgoing) throws SchemaChangeException;
-  //public abstract void projectBuildRecord(@Named("buildIndex") int buildIndex, @Named("outIndex") int outIndex) throws SchemaChangeException;
-//
-  //public abstract void projectProbeRecord(@Named("probeIndex") int probeIndex, @Named("outIndex") int outIndex) throws SchemaChangeException;
-//
 }
