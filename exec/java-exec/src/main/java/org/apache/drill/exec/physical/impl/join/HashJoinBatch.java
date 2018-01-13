@@ -491,7 +491,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           if (!rightSchema.equals(right.getSchema())) {
             throw SchemaChangeException.schemaChanged("Hash join does not support schema changes in build side.", rightSchema, right.getSchema());
           }
-          hashTables[0].updateBatches();
+          for (int i = 0; i < numPartitions; i++) { hashTables[i].updateBatches(); }
         }
 
         // Fall through
