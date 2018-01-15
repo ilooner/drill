@@ -144,9 +144,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       "outgoing" /* write container */,
       PROJECT_PROBE_CONSTANT, PROJECT_PROBE);
 
-  // indicates if we have previously returned an output batch
-  boolean firstOutputBatch = true;
-
   private final HashTableStats htStats = new HashTableStats();
 
   private final MajorType HVtype = MajorType.newBuilder()
