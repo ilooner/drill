@@ -132,18 +132,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       "doSetup" /* eval method */,
       null /* reset */, null /* cleanup */);
 
-
-  // Mapping set for the build side
-  private final MappingSet projectBuildMapping =
-      new MappingSet("buildIndex" /* read index */, "outIndex" /* write index */, "buildBatch" /* read container */,
-          "outgoing" /* write container */, PROJECT_BUILD_CONSTANT, PROJECT_BUILD);
-
-  // Mapping set for the probe side
-  private final MappingSet projectProbeMapping = new MappingSet("probeIndex" /* read index */, "outIndex" /* write index */,
-      "probeBatch" /* read container */,
-      "outgoing" /* write container */,
-      PROJECT_PROBE_CONSTANT, PROJECT_PROBE);
-
   private final HashTableStats htStats = new HashTableStats();
 
   private final MajorType HVtype = MajorType.newBuilder()
@@ -151,9 +139,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     .setMode(DataMode.REQUIRED /* mode */ )
     .build();
 
-  int rightHVColPosition;
-  int leftHVColPosition;
-  BufferAllocator allocator;
+  private int rightHVColPosition;
+  private BufferAllocator allocator;
 
   public enum Metric implements MetricDef {
 
@@ -372,7 +359,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     }
     // position of the new "column" for keeping the hash values (after the real columns)
     rightHVColPosition = this.right.getContainer().getNumberOfColumns() ;
-    leftHVColPosition = this.left.getContainer().getNumberOfColumns() ;
   }
 
   /**
