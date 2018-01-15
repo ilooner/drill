@@ -133,7 +133,7 @@ public class ChainedHashTable {
     this.incomingBuild = incomingBuild;
   }
 
-  public HashTable createAndSetupHashTable(TypedFieldId[] outKeyFieldIds, int numPartitions) throws ClassTransformationException,
+  public HashTable createAndSetupHashTable(TypedFieldId[] outKeyFieldIds) throws ClassTransformationException,
       IOException, SchemaChangeException {
     CodeGenerator<HashTable> top = CodeGenerator.get(HashTable.TEMPLATE_DEFINITION, context.getOptions());
     top.plainJavaCapable(true);
@@ -154,7 +154,6 @@ public class ChainedHashTable {
 
     ErrorCollector collector = new ErrorCollectorImpl();
     VectorContainer htContainerOrig = new VectorContainer(); // original ht container from which others may be cloned
-    LogicalExpression[] htKeyExprs = new LogicalExpression[htConfig.getKeyExprsBuild().size()];
     TypedFieldId[] htKeyFieldIds = new TypedFieldId[htConfig.getKeyExprsBuild().size()];
 
     int i = 0;
