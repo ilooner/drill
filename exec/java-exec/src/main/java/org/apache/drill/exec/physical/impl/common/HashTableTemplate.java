@@ -540,6 +540,8 @@ public abstract class HashTableTemplate implements HashTable {
 
   @Override
   public void clear() {
+    htContainerOrig.clear();
+
     if (batchHolders != null) {
       for (BatchHolder bh : batchHolders) {
         bh.clear();
@@ -811,7 +813,7 @@ public abstract class HashTableTemplate implements HashTable {
   }
   public void updateIncoming(VectorContainer newIncoming) {
     incomingBuild = newIncoming;
-    // reset();
+    reset();
     try {
       updateBatches();  // Needed to update the value vectors in the generated code with the new incoming
     } catch (SchemaChangeException e) {
