@@ -356,7 +356,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     // initialize every (per partition) entry in the arrays
     for (int i = 0; i < numPartitions; i++ ) {
       try {
-        this.hashTables[i] = baseHashTable.createAndSetupHashTable(null, numPartitions);
+        this.hashTables[i] = baseHashTable.createAndSetupHashTable(null);
         this.hashTables[i].setMaxVarcharSize(maxColumnWidth);
       } catch (ClassTransformationException e) {
         throw UserException.unsupportedError(e)
