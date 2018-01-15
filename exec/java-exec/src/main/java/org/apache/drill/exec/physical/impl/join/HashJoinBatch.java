@@ -113,25 +113,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   // Schema of the build side
   private BatchSchema rightSchema = null;
 
-  // Generator mapping for the build side
-  // Generator mapping for the build side : scalar
-  private static final GeneratorMapping PROJECT_BUILD =
-      GeneratorMapping.create("doSetup"/* setup method */, "projectBuildRecord" /* eval method */, null /* reset */,
-          null /* cleanup */);
-  // Generator mapping for the build side : constant
-  private static final GeneratorMapping PROJECT_BUILD_CONSTANT = GeneratorMapping.create("doSetup"/* setup method */,
-      "doSetup" /* eval method */,
-      null /* reset */, null /* cleanup */);
-
-  // Generator mapping for the probe side : scalar
-  private static final GeneratorMapping PROJECT_PROBE =
-      GeneratorMapping.create("doSetup" /* setup method */, "projectProbeRecord" /* eval method */, null /* reset */,
-          null /* cleanup */);
-  // Generator mapping for the probe side : constant
-  private static final GeneratorMapping PROJECT_PROBE_CONSTANT = GeneratorMapping.create("doSetup" /* setup method */,
-      "doSetup" /* eval method */,
-      null /* reset */, null /* cleanup */);
-
   private final HashTableStats htStats = new HashTableStats();
 
   private final MajorType HVtype = MajorType.newBuilder()
