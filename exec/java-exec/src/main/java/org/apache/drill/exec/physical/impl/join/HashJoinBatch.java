@@ -86,49 +86,15 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   // Runtime generated class implementing HashJoinProbe interface
   private HashJoinProbe hashJoinProbe = null;
 
-  //
-  //
-  //  Fields used for partitioning
-  //
-  //
+  // Fields used for partitioning
   private int numPartitions = 1; // must be 2 to the power of bitsInMask (set in setup())
   private int partitionMask = 0; // numPartitions - 1
   private int bitsInMask = 0; // number of bits in the MASK
-  private int nextPartitionToReturn = 0; // which partition to return the next batch from
-  // The following members are used for logging, metrics, etc.
-  private int rowsInPartition = 0; // counts #rows in each partition
-  private int rowsNotSpilled = 0;
-  private int rowsSpilled = 0;
-  private int rowsSpilledReturned = 0;
-  private int rowsReturnedEarly = 0;
-
-  private boolean isTwoPhase = false; // 1 phase or 2 phase aggr?
-  private boolean is2ndPhase = false;
-  private boolean is1stPhase = false;
-  private boolean canSpill = true; // make it false in case can not spill/return-early
   private ChainedHashTable baseHashTable;
-  private boolean earlyOutput = false; // when 1st phase returns a partition due to no memory
-  private int earlyPartition = 0; // which partition to return early
-  private boolean retrySameIndex = false; // in case put failed during 1st phase - need to output early, then retry
-  private boolean useMemoryPrediction = false; // whether to use memory prediction to decide when to spill
   private boolean buildSideIsEmpty = true;
-  private long estMaxBatchSize = 0; // used for adjusting #partitions and deciding when to spill
-  private long estRowWidth = 0; // the size of the internal "row" (keys + values + extra columns)
-  private long estValuesRowWidth = 0; // the size of the internal values ( values + extra )
-  private long estOutputRowWidth = 0; // the size of the output "row" (no extra columns)
-  private long estValuesBatchSize = 0; // used for "reserving" memory for the Values batch to overcome an OOM
-  private long estOutgoingAllocSize = 0; // used for "reserving" memory for the Outgoing Output Values to overcome an OOM
-  private long reserveValueBatchMemory; // keep "reserve memory" for Values Batch
-  private long reserveOutgoingMemory; // keep "reserve memory" for the Outgoing (Values only) output
-  private static final int VARIABLE_MAX_WIDTH_VALUE_SIZE = 50;
   private static final int VARIABLE_MIN_WIDTH_VALUE_SIZE = 8;
   private int maxColumnWidth = VARIABLE_MIN_WIDTH_VALUE_SIZE; // to control memory allocation for varchars
-  private long minBatchesPerPartition; // for tuning - num partitions and spill decision
-  private long plannedBatches = 0; // account for planned, but not yet allocated batches
 
-  //
-  //  = = = = = = = = = = = = = =
-  //
   /* Helper class
    * Maintains linked list of build side records with the same key
    * Keeps information about which build records have a corresponding
@@ -146,7 +112,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
   private ArrayList<ArrayList<VectorContainer>> partitionContainers;
   private int batchCount[];
-  //  = = = = = = = = = = = = = = =
 
   // Number of records in the output container
   private int outputRecords;
@@ -451,7 +416,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     for (int i = 0; i < numPartitions; i++) { tmpBatchesList[i] = new ArrayList<>(); }
     VectorContainer currentBatches[] = new VectorContainer[numPartitions];
     IntVector HV_vectors[] = new IntVector[numPartitions];
-    int HVindex = 0;
     // initialize partition's batches and hash-value vectors
     for (int i = 0; i < numPartitions; i++) {
       if ( currentBatches[i] == null ) { currentBatches[i] = allocateNewVectorContainer(right); }
@@ -657,26 +621,17 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
   private void updateStats(HashTable[] htables) {
     if ( htables == null ) { return; } // no stats when the right side is empty
-    long numSpilled = 0;
     HashTableStats newStats = new HashTableStats();
     // sum the stats from all the partitions
     for (int ind = 0; ind < numPartitions; ind++) {
       htables[ind].getStats(newStats);
       htStats.addStats(newStats);
-      //if (isSpilled(ind)) {
-      //  numSpilled++;
-      //}
     }
     this.stats.setLongStat(Metric.NUM_BUCKETS, htStats.numBuckets);
     this.stats.setLongStat(Metric.NUM_ENTRIES, htStats.numEntries);
     this.stats.setLongStat(Metric.NUM_RESIZING, htStats.numResizing);
     this.stats.setLongStat(Metric.RESIZING_TIME_MS, htStats.resizingTime);
     this.stats.setLongStat(Metric.NUM_PARTITIONS, numPartitions);
-    // this.stats.setLongStat(Metric.SPILL_CYCLE, cycleNum); // Put 0 in case no spill
-    //  this.stats.setLongStat(Metric.SPILLED_PARTITIONS, numSpilled);
-    //if ( rowsReturnedEarly > 0 ) {
-    //  stats.setLongStat(Metric.SPILL_MB, // update stats - est. total MB returned early
-    //    (int) Math.round( rowsReturnedEarly * estOutputRowWidth / 1024.0D / 1024.0));
   }
 
   @Override

@@ -134,7 +134,7 @@ public class ChainedHashTable {
     this.incomingBuild = incomingBuild;
   }
 
-  public HashTable createAndSetupHashTable(TypedFieldId[] outKeyFieldIds, int numPartitions) throws ClassTransformationException,
+  public HashTable createAndSetupHashTable(TypedFieldId[] outKeyFieldIds) throws ClassTransformationException,
       IOException, SchemaChangeException {
     CodeGenerator<HashTable> top = CodeGenerator.get(HashTable.TEMPLATE_DEFINITION, context.getOptions());
     top.plainJavaCapable(true);
