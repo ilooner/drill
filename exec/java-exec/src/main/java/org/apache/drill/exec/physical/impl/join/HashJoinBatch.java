@@ -351,6 +351,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     hashTables = new HashTable[numPartitions] ;
     hjHelpers = new HashJoinHelper[numPartitions];
 
+    System.out.println("Setting up " + hjHelpers);
+
     partitionContainers = new ArrayList<>();
 
     // initialize every (per partition) entry in the arrays
@@ -637,21 +639,28 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   @Override
   public void close() {
     for ( int part = 0; part < numPartitions; part++ ) {
-      if (hjHelpers[part] != null) {
+      if (hjHelpers != null && hjHelpers[part] != null) {
         hjHelpers[part].clear();
       }
 
-      ArrayList<VectorContainer> thisPart = partitionContainers.get(part) ;
-      if ( batchCount != null && thisPart != null ) {
-         for (int i = 0; i < batchCount[part]; i++) { thisPart.get(i).clear(); }
-         thisPart.clear();
+      if (partitionContainers != null) {
+        ArrayList<VectorContainer> thisPart = partitionContainers.get(part);
+        if (batchCount != null && thisPart != null) {
+          for (int i = 0; i < batchCount[part]; i++) {
+            thisPart.get(i).clear();
+          }
+          thisPart.clear();
+        }
       }
 
-      if (hashTables[part] != null) {
+      if (hashTables != null && hashTables[part] != null) {
         hashTables[part].clear();
       }
     }
-    partitionContainers.clear();
+
+    if (partitionContainers != null) {
+      partitionContainers.clear();
+    }
 
     super.close();
   }
