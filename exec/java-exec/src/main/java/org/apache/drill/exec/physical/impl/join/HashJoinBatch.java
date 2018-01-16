@@ -122,7 +122,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
   private int rightHVColPosition;
   private BufferAllocator allocator;
-  private boolean setup = false;
 
   public enum Metric implements MetricDef {
 
@@ -313,7 +312,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
    *  Call only after num partitions is known
    */
   private void delayedSetup() {
-    setup = true;
     hashTables = new HashTable[numPartitions] ;
     hjHelpers = new HashJoinHelper[numPartitions];
 
@@ -603,12 +601,15 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
   @Override
   public void close() {
-    if (setup) {
+    if (hjHelpers != null) {
       for (int part = 0; part < numPartitions; part++) {
         if (hjHelpers[part] != null) {
           hjHelpers[part].clear();
         }
-
+      }
+    }
+    if ( partitionContainers != null ) {
+      for (int part = 0; part < numPartitions; part++) {
         ArrayList<VectorContainer> thisPart = partitionContainers.get(part);
         if (batchCount != null && thisPart != null) {
           for (int i = 0; i < batchCount[part]; i++) {
@@ -616,15 +617,17 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           }
           thisPart.clear();
         }
-
+      }
+      partitionContainers.clear();
+    }
+    if ( hashTables != null ) {
+      for (int part = 0; part < numPartitions; part++) {
         if (hashTables[part] != null) {
           hashTables[part].clear();
         }
       }
-
-      partitionContainers.clear();
     }
-
     super.close();
   }
-}
+
+}  // public class HashJoinBatch
