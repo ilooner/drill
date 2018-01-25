@@ -201,8 +201,6 @@ public abstract class HashAggTemplate implements HashAggregator {
     private int maxOccupiedIdx = -1;
     private int batchOutputCount = 0;
 
-    private int capacity = Integer.MAX_VALUE;
-
     @SuppressWarnings("resource")
     public BatchHolder() {
 
@@ -232,8 +230,6 @@ public abstract class HashAggTemplate implements HashAggregator {
           } else {
             vector.allocateNew();
           }
-
-          capacity = Math.min(capacity, vector.getValueCapacity());
 
           aggrValuesContainer.add(vector);
         }
@@ -462,7 +458,7 @@ public abstract class HashAggTemplate implements HashAggregator {
     // initialize every (per partition) entry in the arrays
     for (int i = 0; i < numPartitions; i++ ) {
       try {
-        this.htables[i] = baseHashTable.createAndSetupHashTable(groupByOutFieldIds, numPartitions);
+        this.htables[i] = baseHashTable.createAndSetupHashTable(groupByOutFieldIds);
         this.htables[i].setMaxVarcharSize(maxColumnWidth);
       } catch (ClassTransformationException e) {
         throw UserException.unsupportedError(e)
@@ -493,7 +489,8 @@ public abstract class HashAggTemplate implements HashAggregator {
     currentBatchRecordCount = newIncoming.getRecordCount(); // first batch in this spill file
     nextPartitionToReturn = 0;
     for (int i = 0; i < numPartitions; i++ ) {
-      htables[i].reinit(newIncoming);
+      htables[i].updateIncoming(newIncoming.getContainer());
+      htables[i].reset();
       if ( batchHolders[i] != null) {
         for (BatchHolder bh : batchHolders[i]) {
           bh.clear();
@@ -1258,7 +1255,7 @@ public abstract class HashAggTemplate implements HashAggregator {
     int hashCode;
     try {
       // htables[0].updateBatches();
-      hashCode = htables[0].getHashCode(incomingRowIdx);
+      hashCode = htables[0].getBuildHashCode(incomingRowIdx);
     } catch (SchemaChangeException e) {
       throw new UnsupportedOperationException("Unexpected schema change", e);
     }

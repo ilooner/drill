@@ -19,10 +19,12 @@ package org.apache.drill.exec.physical.impl.join;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 import com.google.common.collect.Lists;
 import org.apache.drill.common.exceptions.RetryAfterSpillException;
+import org.apache.drill.common.exceptions.UserException;
 import org.apache.drill.common.expression.FieldReference;
 import org.apache.drill.common.logical.data.JoinCondition;
 import org.apache.drill.common.logical.data.NamedExpression;
@@ -38,6 +40,8 @@ import org.apache.drill.exec.exception.OutOfMemoryException;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.expr.ClassGenerator;
 import org.apache.drill.exec.expr.CodeGenerator;
+import org.apache.drill.exec.expr.TypeHelper;
+import org.apache.drill.exec.memory.BufferAllocator;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.ops.MetricDef;
 import org.apache.drill.exec.physical.config.HashJoinPOP;
@@ -47,27 +51,23 @@ import org.apache.drill.exec.physical.impl.common.HashTableConfig;
 import org.apache.drill.exec.physical.impl.common.HashTableStats;
 import org.apache.drill.exec.physical.impl.common.IndexPointer;
 import org.apache.drill.exec.physical.impl.common.Comparator;
-import org.apache.drill.exec.physical.impl.sort.RecordBatchData;
 import org.apache.drill.exec.record.AbstractBinaryRecordBatch;
 import org.apache.drill.exec.record.BatchSchema;
 import org.apache.drill.exec.record.BatchSchema.SelectionVectorMode;
-import org.apache.drill.exec.record.ExpandableHyperContainer;
 import org.apache.drill.exec.record.MaterializedField;
 import org.apache.drill.exec.record.RecordBatch;
-import org.apache.drill.exec.record.TypedFieldId;
 import org.apache.drill.exec.record.VectorContainer;
 import org.apache.drill.exec.record.VectorWrapper;
+import org.apache.drill.exec.vector.FixedWidthVector;
+import org.apache.drill.exec.vector.IntVector;
+import org.apache.drill.exec.vector.ObjectVector;
 import org.apache.drill.exec.vector.ValueVector;
+import org.apache.drill.exec.vector.VariableWidthVector;
 import org.apache.drill.exec.vector.complex.AbstractContainerVector;
 import org.apache.calcite.rel.core.JoinRelType;
 
-import com.sun.codemodel.JExpr;
-import com.sun.codemodel.JExpression;
-import com.sun.codemodel.JVar;
-
 public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
-  public static final long ALLOCATOR_INITIAL_RESERVATION = 1 * 1024 * 1024;
-  public static final long ALLOCATOR_MAX_RESERVATION = 20L * 1000 * 1000 * 1000;
+  protected static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(HashJoinBatch.class);
 
   // Join type, INNER, LEFT, RIGHT or OUTER
   private final JoinRelType joinType;
@@ -80,74 +80,56 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   // Runtime generated class implementing HashJoinProbe interface
   private HashJoinProbe hashJoinProbe = null;
 
+  // Fields used for partitioning
+  private int numPartitions = 1; // must be 2 to the power of bitsInMask (set in setup())
+  private int partitionMask = 0; // numPartitions - 1
+  private int bitsInMask = 0; // number of bits in the MASK
+  private ChainedHashTable baseHashTable;
+  private boolean buildSideIsEmpty = true;
+  private static final int VARIABLE_MIN_WIDTH_VALUE_SIZE = 8;
+  private int maxColumnWidth = VARIABLE_MIN_WIDTH_VALUE_SIZE; // to control memory allocation for varchars
+
   /* Helper class
    * Maintains linked list of build side records with the same key
    * Keeps information about which build records have a corresponding
    * matching key in the probe side (for outer, right joins)
    */
-  private HashJoinHelper hjHelper = null;
+  private HashJoinHelper hjHelpers[];
 
   // Underlying hashtable used by the hash join
-  private HashTable hashTable = null;
+  private HashTable hashTables[];
 
   /* Hyper container to store all build side record batches.
    * Records are retrieved from this container when there is a matching record
    * on the probe side
    */
-  private ExpandableHyperContainer hyperContainer;
+
+  private ArrayList<ArrayList<VectorContainer>> partitionContainers;
+  private int batchCount[];
 
   // Number of records in the output container
   private int outputRecords;
 
-  // Current batch index on the build side
-  private int buildBatchIndex = 0;
-
   // Schema of the build side
   private BatchSchema rightSchema = null;
 
-
-  // Generator mapping for the build side
-  // Generator mapping for the build side : scalar
-  private static final GeneratorMapping PROJECT_BUILD =
-      GeneratorMapping.create("doSetup"/* setup method */, "projectBuildRecord" /* eval method */, null /* reset */,
-          null /* cleanup */);
-  // Generator mapping for the build side : constant
-  private static final GeneratorMapping PROJECT_BUILD_CONSTANT = GeneratorMapping.create("doSetup"/* setup method */,
-      "doSetup" /* eval method */,
-      null /* reset */, null /* cleanup */);
-
-  // Generator mapping for the probe side : scalar
-  private static final GeneratorMapping PROJECT_PROBE =
-      GeneratorMapping.create("doSetup" /* setup method */, "projectProbeRecord" /* eval method */, null /* reset */,
-          null /* cleanup */);
-  // Generator mapping for the probe side : constant
-  private static final GeneratorMapping PROJECT_PROBE_CONSTANT = GeneratorMapping.create("doSetup" /* setup method */,
-      "doSetup" /* eval method */,
-      null /* reset */, null /* cleanup */);
-
-
-  // Mapping set for the build side
-  private final MappingSet projectBuildMapping =
-      new MappingSet("buildIndex" /* read index */, "outIndex" /* write index */, "buildBatch" /* read container */,
-          "outgoing" /* write container */, PROJECT_BUILD_CONSTANT, PROJECT_BUILD);
-
-  // Mapping set for the probe side
-  private final MappingSet projectProbeMapping = new MappingSet("probeIndex" /* read index */, "outIndex" /* write index */,
-      "probeBatch" /* read container */,
-      "outgoing" /* write container */,
-      PROJECT_PROBE_CONSTANT, PROJECT_PROBE);
-
-  // indicates if we have previously returned an output batch
-  boolean firstOutputBatch = true;
-
   private final HashTableStats htStats = new HashTableStats();
+
+  private final MajorType HVtype = MajorType.newBuilder()
+    .setMinorType(org.apache.drill.common.types.TypeProtos.MinorType.INT /* dataType */ )
+    .setMode(DataMode.REQUIRED /* mode */ )
+    .build();
+
+  private int rightHVColPosition;
+  private BufferAllocator allocator;
 
   public enum Metric implements MetricDef {
 
     NUM_BUCKETS,
     NUM_ENTRIES,
     NUM_RESIZING,
-    RESIZING_TIME_MS;
+    RESIZING_TIME_MS,
+    NUM_PARTITIONS;
 
     // duplicate for hash ag
 
@@ -169,19 +151,10 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     }
 
     // Initialize the hash join helper context
-    hjHelper = new HashJoinHelper(context, oContext.getAllocator());
     try {
       rightSchema = right.getSchema();
-      final VectorContainer vectors = new VectorContainer(oContext);
-      for (final VectorWrapper<?> w : right) {
-        vectors.addOrGet(w.getField());
-      }
-      vectors.buildSchema(SelectionVectorMode.NONE);
-      vectors.setRecordCount(0);
-      hyperContainer = new ExpandableHyperContainer(vectors);
-      hjHelper.addNewBatch(0);
-      buildBatchIndex++;
-      if (isFurtherProcessingRequired(rightUpstream) && this.right.getRecordCount() > 0) {
+
+      if ( rightUpstream != IterOutcome.NONE ) {
         setupHashTable();
       }
       hashJoinProbe = setupHashJoinProbe();
@@ -206,15 +179,16 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         // Build the hash table, using the build side record batches.
         executeBuildPhase();
         //                IterOutcome next = next(HashJoinHelper.LEFT_INPUT, left);
-        hashJoinProbe.setupHashJoinProbe(context, hyperContainer, left, left.getRecordCount(), this, hashTable,
-            hjHelper, joinType);
+        hashJoinProbe.setupHashJoinProbe(partitionContainers, left, this, hashTables, hjHelpers, joinType, numPartitions);
 
         // Update the hash table related stats for the operator
-        updateStats(this.hashTable);
+        updateStats(this.hashTables);
       }
 
       // Store the number of records projected
-      if ((hashTable != null && !hashTable.isEmpty()) || joinType != JoinRelType.INNER) {
+
+      if ( ! buildSideIsEmpty ||  // If there are build-side rows
+           joinType != JoinRelType.INNER) {  // or if this is a left/full outer join
 
         // Allocate the memory for the vectors in the output container
         allocateVectors();
@@ -256,15 +230,55 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
       // No more output records, clean up and return
       state = BatchState.DONE;
-      //            if (first) {
-      //              return IterOutcome.OK_NEW_SCHEMA;
-      //            }
+
       return IterOutcome.NONE;
     } catch (ClassTransformationException | SchemaChangeException | IOException e) {
       context.fail(e);
       killIncoming(false);
       return IterOutcome.STOP;
     }
+  }
+
+  /**
+   * Allocate a new vector container for either right or left record batch
+   * Add an additional special vector for the hash values
+   * Note: this call may OOM !!
+   * @param rb - either the right or the left record batch
+   * @return the new vector container
+   */
+  private VectorContainer allocateNewVectorContainer(RecordBatch rb) {
+    VectorContainer newVC = new VectorContainer();
+    VectorContainer fromVC = rb.getContainer();
+    Iterator<VectorWrapper<?>> vci = fromVC.iterator();
+    boolean success = false;
+
+    try {
+      while (vci.hasNext()) {
+        VectorWrapper vw = vci.next();
+        ValueVector vv = vw.getValueVector();
+        ValueVector newVV = TypeHelper.getNewVector(vv.getField(), allocator);
+        newVC.add(newVV); // add first to allow dealloc in case of an OOM
+
+        if (newVV instanceof FixedWidthVector) {
+          ((FixedWidthVector) newVV).allocateNew(HashTable.BATCH_SIZE);
+        } else if (newVV instanceof VariableWidthVector) {
+          // Need to check - (is this case ever used?) if a varchar falls under ObjectVector which is allocated on the heap !
+          ((VariableWidthVector) newVV).allocateNew(maxColumnWidth * HashTable.BATCH_SIZE, HashTable.BATCH_SIZE);
+        } else if (newVV instanceof ObjectVector) {
+          ((ObjectVector) newVV).allocateNew(HashTable.BATCH_SIZE);
+        } else {
+          newVV.allocateNew();
+        }
+      }
+
+      newVC.setRecordCount(0);
+      success = true;
+    } finally {
+      if ( !success ) {
+        newVC.clear(); // in case of an OOM
+      }
+    }
+    return newVC;
   }
 
   public void setupHashTable() throws IOException, SchemaChangeException, ClassTransformationException {
@@ -284,39 +298,93 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       leftExpr = null;
     } else {
       if (left.getSchema().getSelectionVectorMode() != BatchSchema.SelectionVectorMode.NONE) {
-        final String errorMsg = new StringBuilder()
-            .append("Hash join does not support probe batch with selection vectors. ")
-            .append("Probe batch has selection mode = ")
-            .append(left.getSchema().getSelectionVectorMode())
-            .toString();
+        final String errorMsg = new StringBuilder().append("Hash join does not support probe batch with selection vectors. ").append("Probe batch has selection mode = ").append(left.getSchema().getSelectionVectorMode()).toString();
         throw new SchemaChangeException(errorMsg);
       }
     }
-
-    final HashTableConfig htConfig =
-        new HashTableConfig((int) context.getOptions().getOption(ExecConstants.MIN_HASH_TABLE_SIZE),
-            HashTable.DEFAULT_LOAD_FACTOR, rightExpr, leftExpr, comparators);
+    final HashTableConfig htConfig = new HashTableConfig((int) context.getOptions().getOption(ExecConstants.MIN_HASH_TABLE_SIZE), HashTable.DEFAULT_LOAD_FACTOR, rightExpr, leftExpr, comparators);
 
     // Create the chained hash table
-    final ChainedHashTable ht =
-        new ChainedHashTable(htConfig, context, oContext.getAllocator(), this.right, this.left, null);
-    hashTable = ht.createAndSetupHashTable(null, 1);
+    baseHashTable =
+      new ChainedHashTable(htConfig, context, allocator, this.right, this.left, null);
   }
 
+  /**
+   *  Call only after num partitions is known
+   */
+  private void delayedSetup() {
+    hashTables = new HashTable[numPartitions] ;
+    hjHelpers = new HashJoinHelper[numPartitions];
+
+    System.out.println("Setting up " + hjHelpers);
+
+    partitionContainers = new ArrayList<>();
+
+    // initialize every (per partition) entry in the arrays
+    for (int i = 0; i < numPartitions; i++ ) {
+      try {
+        this.hashTables[i] = baseHashTable.createAndSetupHashTable(null);
+        this.hashTables[i].setMaxVarcharSize(maxColumnWidth);
+      } catch (ClassTransformationException e) {
+        throw UserException.unsupportedError(e)
+          .message("Code generation error - likely an error in the code.")
+          .build(logger);
+      } catch (IOException e) {
+        throw UserException.resourceError(e)
+          .message("IO Error while creating a hash table.")
+          .build(logger);
+      } catch (SchemaChangeException sce) {
+        throw new IllegalStateException("Unexpected Schema Change while creating a hash table",sce);
+      }
+      this.hjHelpers[i] = new HashJoinHelper(context, allocator);
+    }
+    // position of the new "column" for keeping the hash values (after the real columns)
+    rightHVColPosition = this.right.getContainer().getNumberOfColumns() ;
+  }
+
+  /**
+   *
+   * @throws SchemaChangeException
+   * @throws ClassTransformationException
+   * @throws IOException
+   */
   public void executeBuildPhase() throws SchemaChangeException, ClassTransformationException, IOException {
+
+    if ( rightUpstream == IterOutcome.NONE ) { return; } // empty right
     //Setup the underlying hash table
 
     // skip first batch if count is zero, as it may be an empty schema batch
-    if (isFurtherProcessingRequired(rightUpstream) && right.getRecordCount() == 0) {
+    if (false && right.getRecordCount() == 0) {
       for (final VectorWrapper<?> w : right) {
         w.clear();
       }
       rightUpstream = next(right);
-      if (isFurtherProcessingRequired(rightUpstream) &&
-          right.getRecordCount() > 0 && hashTable == null) {
-        setupHashTable();
+    }
+
+    //
+    //  Find out the estimated max batch size, etc
+    //  and compute the max numPartitions possible
+    //
+    numPartitions = 8; // just for initial work; change later
+    partitionMask = 7;
+    bitsInMask = 3;
+
+    delayedSetup();
+
+    batchCount = new int[numPartitions];
+    List<VectorContainer> tmpBatchesList[] = new ArrayList[numPartitions];
+    for (int i = 0; i < numPartitions; i++) { tmpBatchesList[i] = new ArrayList<>(); }
+    VectorContainer currentBatches[] = new VectorContainer[numPartitions];
+    IntVector HV_vectors[] = new IntVector[numPartitions];
+    // initialize partition's batches and hash-value vectors
+    for (int i = 0; i < numPartitions; i++) {
+      if ( currentBatches[i] == null ) { currentBatches[i] = allocateNewVectorContainer(right); }
+      if ( HV_vectors[i] == null ) {
+        HV_vectors[i] = new IntVector(MaterializedField.create("Hash_Values", HVtype), allocator);
+        HV_vectors[i].allocateNew(HashTable.BATCH_SIZE);
       }
     }
+    buildSideIsEmpty = false;
 
     boolean moreData = true;
 
@@ -337,7 +405,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
             final String errorMsg = new StringBuilder()
                 .append("Hash join does not support build batch with selection vectors. ")
                 .append("Build batch has selection mode = ")
-                .append(left.getSchema().getSelectionVectorMode())
+                .append(rightSchema.getSelectionVectorMode())
                 .toString();
 
             throw new SchemaChangeException(errorMsg);
@@ -347,75 +415,100 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           if (!rightSchema.equals(right.getSchema())) {
             throw SchemaChangeException.schemaChanged("Hash join does not support schema changes in build side.", rightSchema, right.getSchema());
           }
-          hashTable.updateBatches();
+          for (int i = 0; i < numPartitions; i++) { hashTables[i].updateBatches(); }
         }
+
         // Fall through
       case OK:
         final int currentRecordCount = right.getRecordCount();
 
-                    /* For every new build batch, we store some state in the helper context
-                     * Add new state to the helper context
-                     */
-        hjHelper.addNewBatch(currentRecordCount);
+        // For every record in the build batch, hash the key columns and keep the result
+        for (int ind = 0; ind < currentRecordCount; ind++) {
+          int hashCode = hashTables[0].getBuildHashCode(ind);
+          int currPart = hashCode & partitionMask ;
+          hashCode >>>= bitsInMask;
+          int pos = currentBatches[currPart].appendRow(right.getContainer(),ind);
+          HV_vectors[currPart].getMutator().set(pos, hashCode);   // store the hash value in the new column
+          if ( pos + 1 == HashTable.BATCH_SIZE ) {
+            currentBatches[currPart].add(HV_vectors[currPart]);
+            currentBatches[currPart].buildSchema(SelectionVectorMode.NONE);
+            tmpBatchesList[currPart].add(batchCount[currPart]++, currentBatches[currPart]);
+            currentBatches[currPart] = allocateNewVectorContainer(right);
+            HV_vectors[currPart] = new IntVector(MaterializedField.create("Hash_Values", HVtype), allocator);
+            HV_vectors[currPart].allocateNew(HashTable.BATCH_SIZE);
+          }
+        }
+
+        break;
+      }
+      // Get the next incoming record batch
+      rightUpstream = next(HashJoinHelper.RIGHT_INPUT, right);
+    }
+
+    // Move the remaining current batches into their temp lists
+    for (int currPart = 0; currPart < numPartitions; currPart++) {
+      int pos = currentBatches[currPart].getRecordCount();
+      if ( pos == 0 ) { // in case the current is empty
+        currentBatches[currPart].clear();
+        HV_vectors[currPart].clear();
+        continue;
+      }
+      currentBatches[currPart].add(HV_vectors[currPart]);
+      currentBatches[currPart].buildSchema(SelectionVectorMode.NONE);
+      tmpBatchesList[currPart].add(batchCount[currPart]++, currentBatches[currPart]);
+    }
+
+    //
+    //  Traverse all the partitions' incoming batches, and build their hash tables
+    //
+    for (int currPart = 0; currPart < numPartitions; currPart++) {
+
+      // each partition is a regular array of batches
+      ArrayList<VectorContainer> thisPart = new ArrayList<>();
+
+      for (int curr = 0; curr < batchCount[currPart]; curr++) {
+        VectorContainer nextBatch = tmpBatchesList[currPart].get(curr);
+        final int currentRecordCount = nextBatch.getRecordCount();
+
+        // For every incoming build batch, we create a matching helper
+        hjHelpers[currPart].addNewBatch(currentRecordCount);
 
         // Holder contains the global index where the key is hashed into using the hash table
         final IndexPointer htIndex = new IndexPointer();
 
-        // For every record in the build batch , hash the key columns
-        for (int i = 0; i < currentRecordCount; i++) {
-          int hashCode = hashTable.getHashCode(i);
+        hashTables[currPart].updateIncoming(nextBatch);
+
+        IntVector HV_vector = (IntVector) nextBatch.getValueVector(rightHVColPosition).getValueVector();
+
+        for (int recInd = 0; recInd < currentRecordCount; recInd++) {
+          int hashCode = HV_vector.getAccessor().get(recInd);
           try {
-            hashTable.put(i, htIndex, hashCode);
-          } catch (RetryAfterSpillException RE) { throw new OutOfMemoryException("HT put");} // Hash Join can not retry yet
+            hashTables[currPart].put(recInd, htIndex, hashCode);
+          } catch (RetryAfterSpillException RE) {
+            throw new OutOfMemoryException("HT put");
+          } // Hash Join can not retry yet
                         /* Use the global index returned by the hash table, to store
                          * the current record index and batch index. This will be used
                          * later when we probe and find a match.
                          */
-          hjHelper.setCurrentIndex(htIndex.value, buildBatchIndex, i);
+          hjHelpers[currPart].setCurrentIndex(htIndex.value, curr /* buildBatchIndex */, recInd);
         }
 
-                    /* Completed hashing all records in this batch. Transfer the batch
-                     * to the hyper vector container. Will be used when we want to retrieve
-                     * records that have matching keys on the probe side.
-                     */
-        final RecordBatchData nextBatch = new RecordBatchData(right, oContext.getAllocator());
-        boolean success = false;
-        try {
-          if (hyperContainer == null) {
-            hyperContainer = new ExpandableHyperContainer(nextBatch.getContainer());
-          } else {
-            hyperContainer.addBatch(nextBatch.getContainer());
-          }
-
-          // completed processing a batch, increment batch index
-          buildBatchIndex++;
-          success = true;
-        } finally {
-          if (!success) {
-            nextBatch.clear();
-          }
-        }
-        break;
+        // partitionContainers[currPart][curr] = nextBatch;
+        thisPart.add(nextBatch);
       }
-      // Get the next record batch
-      rightUpstream = next(HashJoinHelper.RIGHT_INPUT, right);
+
+      partitionContainers.add(thisPart);
     }
   }
 
-  public HashJoinProbe setupHashJoinProbe() throws ClassTransformationException, IOException {
+  private HashJoinProbe setupHashJoinProbe() throws ClassTransformationException, IOException {
     final CodeGenerator<HashJoinProbe> cg = CodeGenerator.get(HashJoinProbe.TEMPLATE_DEFINITION, context.getOptions());
     cg.plainJavaCapable(true);
+
     // Uncomment out this line to debug the generated code.
-    // cg.saveCodeForDebugging(true);
+    cg.saveCodeForDebugging(true);
     final ClassGenerator<HashJoinProbe> g = cg.getRoot();
-
-    // Generate the code to project build side records
-    g.setMappingSet(projectBuildMapping);
-
-    int fieldId = 0;
-    final JExpression buildIndex = JExpr.direct("buildIndex");
-    final JExpression outIndex = JExpr.direct("outIndex");
-    g.rotateBlock();
 
     if (rightSchema != null) {
       for (final MaterializedField field : rightSchema) {
@@ -434,24 +527,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         final MaterializedField projected = field.withType(outputType);
         // Add the vector to our output container
         container.addOrGet(projected);
-
-        final JVar inVV = g.declareVectorValueSetupAndMember("buildBatch", new TypedFieldId(field.getType(), true, fieldId));
-        final JVar outVV = g.declareVectorValueSetupAndMember("outgoing", new TypedFieldId(outputType, false, fieldId));
-        g.getEvalBlock().add(outVV.invoke("copyFromSafe")
-            .arg(buildIndex.band(JExpr.lit((int) Character.MAX_VALUE)))
-            .arg(outIndex)
-            .arg(inVV.component(buildIndex.shrz(JExpr.lit(16)))));
-        g.rotateBlock();
-        fieldId++;
       }
     }
-
-    // Generate the code to project probe side records
-    g.setMappingSet(projectProbeMapping);
-
-    int outputFieldId = fieldId;
-    fieldId = 0;
-    final JExpression probeIndex = JExpr.direct("probeIndex");
 
     if (leftUpstream == IterOutcome.OK || leftUpstream == IterOutcome.OK_NEW_SCHEMA) {
       for (final VectorWrapper<?> vv : left) {
@@ -472,14 +549,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           vv.getValueVector().makeTransferPair(v);
           v.clear();
         }
-
-        final JVar inVV = g.declareVectorValueSetupAndMember("probeBatch", new TypedFieldId(inputType, false, fieldId));
-        final JVar outVV = g.declareVectorValueSetupAndMember("outgoing", new TypedFieldId(outputType, false, outputFieldId));
-
-        g.getEvalBlock().add(outVV.invoke("copyFromSafe").arg(probeIndex).arg(outIndex).arg(inVV));
-        g.rotateBlock();
-        fieldId++;
-        outputFieldId++;
       }
     }
 
@@ -491,6 +560,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     for (final VectorWrapper<?> v : container) {
       v.getValueVector().allocateNew();
     }
+    container.setRecordCount(0); // reset container's counter back to zero records
   }
 
   public HashJoinBatch(HashJoinPOP popConfig, FragmentContext context,
@@ -502,21 +572,28 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     conditions = popConfig.getConditions();
 
     comparators = Lists.newArrayListWithExpectedSize(conditions.size());
+    // When DRILL supports Java 8, use the following instaed of the for() loop
+    // conditions.forEach(cond->comparators.add(JoinUtils.checkAndReturnSupportedJoinComparator(cond)));
     for (int i=0; i<conditions.size(); i++) {
       JoinCondition cond = conditions.get(i);
       comparators.add(JoinUtils.checkAndReturnSupportedJoinComparator(cond));
     }
+    this.allocator = oContext.getAllocator();
   }
 
-  private void updateStats(HashTable htable) {
-    if (htable == null) {
-      return;
+  private void updateStats(HashTable[] htables) {
+    if ( htables == null ) { return; } // no stats when the right side is empty
+    HashTableStats newStats = new HashTableStats();
+    // sum the stats from all the partitions
+    for (int ind = 0; ind < numPartitions; ind++) {
+      htables[ind].getStats(newStats);
+      htStats.addStats(newStats);
     }
-    htable.getStats(htStats);
-    stats.setLongStat(Metric.NUM_BUCKETS, htStats.numBuckets);
-    stats.setLongStat(Metric.NUM_ENTRIES, htStats.numEntries);
-    stats.setLongStat(Metric.NUM_RESIZING, htStats.numResizing);
-    stats.setLongStat(Metric.RESIZING_TIME_MS, htStats.resizingTime);
+    this.stats.setLongStat(Metric.NUM_BUCKETS, htStats.numBuckets);
+    this.stats.setLongStat(Metric.NUM_ENTRIES, htStats.numEntries);
+    this.stats.setLongStat(Metric.NUM_RESIZING, htStats.numResizing);
+    this.stats.setLongStat(Metric.RESIZING_TIME_MS, htStats.resizingTime);
+    this.stats.setLongStat(Metric.NUM_PARTITIONS, numPartitions);
   }
 
   @Override
@@ -527,27 +604,33 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
   @Override
   public void close() {
-    if (hjHelper != null) {
-      hjHelper.clear();
+    if (hjHelpers != null) {
+      for (int part = 0; part < numPartitions; part++) {
+        if (hjHelpers[part] != null) {
+          hjHelpers[part].clear();
+        }
+      }
     }
-
-    // If we didn't receive any data, hyperContainer may be null, check before clearing
-    if (hyperContainer != null) {
-      hyperContainer.clear();
+    if ( partitionContainers != null ) {
+      for (int part = 0; part < numPartitions; part++) {
+        ArrayList<VectorContainer> thisPart = partitionContainers.get(part);
+        if (batchCount != null && thisPart != null) {
+          for (int i = 0; i < batchCount[part]; i++) {
+            thisPart.get(i).clear();
+          }
+          thisPart.clear();
+        }
+      }
+      partitionContainers.clear();
     }
-
-    if (hashTable != null) {
-      hashTable.clear();
+    if ( hashTables != null ) {
+      for (int part = 0; part < numPartitions; part++) {
+        if (hashTables[part] != null) {
+          hashTables[part].clear();
+        }
+      }
     }
     super.close();
   }
 
-  /**
-   * This method checks to see if join processing should be continued further.
-   * @param upStream up stream operator status.
-   * @@return true if up stream status is OK or OK_NEW_SCHEMA otherwise false.
-   */
-  private boolean isFurtherProcessingRequired(IterOutcome upStream) {
-    return upStream == IterOutcome.OK || upStream == IterOutcome.OK_NEW_SCHEMA;
-  }
-}
+}  // public class HashJoinBatch

@@ -19,11 +19,11 @@
 package org.apache.drill.exec.physical.impl.join;
 
 import java.io.IOException;
+import java.util.ArrayList;
 
 import org.apache.drill.exec.compile.TemplateClassDefinition;
 import org.apache.drill.exec.exception.ClassTransformationException;
 import org.apache.drill.exec.exception.SchemaChangeException;
-import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.physical.impl.common.HashTable;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.VectorContainer;
@@ -40,15 +40,14 @@ public interface HashJoinProbe {
    *    case we handle it internally by projecting the record if there isn't a match on the build side
    * 3. DONE: Once we have projected all possible records we are done
    */
-  public static enum ProbeState {
+  enum ProbeState {
     PROBE_PROJECT, PROJECT_RIGHT, DONE
   }
 
-  public abstract void setupHashJoinProbe(FragmentContext context, VectorContainer buildBatch, RecordBatch probeBatch,
-                                          int probeRecordCount, HashJoinBatch outgoing, HashTable hashTable, HashJoinHelper hjHelper,
-                                          JoinRelType joinRelType);
-  public abstract void doSetup(FragmentContext context, VectorContainer buildBatch, RecordBatch probeBatch, RecordBatch outgoing);
-  public abstract int  probeAndProject() throws SchemaChangeException, ClassTransformationException, IOException;
-  public abstract void projectBuildRecord(int buildIndex, int outIndex);
-  public abstract void projectProbeRecord(int probeIndex, int outIndex);
+  void setupHashJoinProbe(ArrayList<ArrayList<VectorContainer>> buildBatches, RecordBatch probeBatch, HashJoinBatch outgoing,
+                          HashTable[] hashTables, HashJoinHelper[] hjHelpers, JoinRelType joinRelType, int numPartitions);
+  // public abstract void doSetup(FragmentContext context, VectorContainer buildBatch, RecordBatch probeBatch, RecordBatch outgoing) throws SchemaChangeException;
+  int  probeAndProject() throws SchemaChangeException, ClassTransformationException, IOException;
+  // public abstract void projectBuildRecord(int buildIndex, int outIndex) throws SchemaChangeException;
+  // public abstract void projectProbeRecord(int probeIndex, int outIndex) throws SchemaChangeException;
 }

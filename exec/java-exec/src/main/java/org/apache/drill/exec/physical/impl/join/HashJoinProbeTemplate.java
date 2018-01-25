@@ -17,14 +17,11 @@
  */
 package org.apache.drill.exec.physical.impl.join;
 
-import java.io.IOException;
 import java.util.List;
 
-import javax.inject.Named;
+import java.util.ArrayList;
 
-import org.apache.drill.exec.exception.ClassTransformationException;
 import org.apache.drill.exec.exception.SchemaChangeException;
-import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.physical.impl.common.HashTable;
 import org.apache.drill.exec.record.BatchSchema;
 import org.apache.drill.exec.record.RecordBatch;
@@ -40,8 +37,6 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
 
   private BatchSchema probeSchema;
 
-  private VectorContainer buildBatch;
-
   // Join type, INNER, LEFT, RIGHT or OUTER
   private JoinRelType joinType;
 
@@ -49,15 +44,18 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
 
   private static final int TARGET_RECORDS_PER_BATCH = 4000;
 
-  /* Helper class
-   * Maintains linked list of build side records with the same key
-   * Keeps information about which build records have a corresponding
-   * matching key in the probe side (for outer, right joins)
-   */
-  private HashJoinHelper hjHelper = null;
+  int numPartitions;
+  int partitionMask;
+  int bitsInMask;
 
-  // Underlying hashtable used by the hash join
-  private HashTable hashTable = null;
+  // private VectorContainer buildBatches[][];
+  private ArrayList<ArrayList<VectorContainer>> buildBatches;
+
+  // Underlying hashtables (one per partition) used by the hash join
+  private HashTable hashTables[] = null;
+  private HashJoinHelper hjHelpers[] = null; // complements each hash table
+
+  int currRightPartition = 0; // for returning RIGHT/FULL
 
   // Number of records to process on the probe side
   private int recordsToProcess = 0;
@@ -80,32 +78,42 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
   // For outer or right joins, this is a list of unmatched records that needs to be projected
   private List<Integer> unmatchedBuildIndexes = null;
 
-  @Override
-  public void setupHashJoinProbe(FragmentContext context, VectorContainer buildBatch, RecordBatch probeBatch,
-                                 int probeRecordCount, HashJoinBatch outgoing, HashTable hashTable,
-                                 HashJoinHelper hjHelper, JoinRelType joinRelType) {
+  // While probing duplicates, retain current build-side partition and hj helper
+  int currBuildPart = 0;
+  HashJoinHelper currHJHelper = null; // for the current partition
+
+  public void setupHashJoinProbe(ArrayList<ArrayList<VectorContainer>> buildBatches, RecordBatch probeBatch, HashJoinBatch outgoing,
+                                 HashTable[] hashTables, HashJoinHelper[] hjHelpers, JoinRelType joinRelType, int numPartitions) {
 
     this.probeBatch = probeBatch;
     this.probeSchema = probeBatch.getSchema();
-    this.buildBatch = buildBatch;
+    this.buildBatches = buildBatches;
     this.joinType = joinRelType;
-    this.recordsToProcess = probeRecordCount;
-    this.hashTable = hashTable;
-    this.hjHelper = hjHelper;
+    this.hashTables = hashTables;
+    this.hjHelpers = hjHelpers;
     this.outgoingJoinBatch = outgoing;
+    this.numPartitions = numPartitions;
+    this.partitionMask = numPartitions - 1;
+    bitsInMask = Integer.bitCount(partitionMask);
 
-    doSetup(context, buildBatch, probeBatch, outgoing);
-  }
-
-  public void executeProjectRightPhase() {
-    while (outputRecords < TARGET_RECORDS_PER_BATCH && recordsProcessed < recordsToProcess) {
-      projectBuildRecord(unmatchedBuildIndexes.get(recordsProcessed), outputRecords);
-      recordsProcessed++;
-      outputRecords++;
+    // A special case - if the left was an empty file
+    if ( probeBatch.getContainer().getNumberOfColumns() == 0 ){
+      probeState = getFinalProbeState();
+    } else {
+       this.recordsToProcess = probeBatch.getRecordCount();
     }
   }
 
-  public void executeProbePhase() throws SchemaChangeException {
+  private void executeProjectRightPhase(int currBuildPart) throws SchemaChangeException {
+    while (outputRecords < TARGET_RECORDS_PER_BATCH && recordsProcessed < recordsToProcess) {
+      outputRecords =
+        outgoingJoinBatch.getContainer().appendRow(buildBatches.get(currBuildPart), unmatchedBuildIndexes.get(recordsProcessed),
+          null /* no probeBatch */, 0 /* no probe index */ );
+      recordsProcessed++;
+    }
+  }
+
+  private void executeProbePhase() throws SchemaChangeException {
     while (outputRecords < TARGET_RECORDS_PER_BATCH && probeState != ProbeState.DONE && probeState != ProbeState.PROJECT_RIGHT) {
 
       // Check if we have processed all records in this batch we need to invoke next
@@ -115,7 +123,6 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
         for (VectorWrapper<?> wrapper : probeBatch) {
           wrapper.getValueVector().clear();
         }
-
         IterOutcome leftUpstream = outgoingJoinBatch.next(HashJoinHelper.LEFT_INPUT, probeBatch);
 
         switch (leftUpstream) {
@@ -124,21 +131,14 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
           case STOP:
             recordsProcessed = 0;
             recordsToProcess = 0;
-            probeState = ProbeState.DONE;
-
-            // We are done with the probe phase. If its a RIGHT or a FULL join get the unmatched indexes from the build side
-            if (joinType == JoinRelType.RIGHT || joinType == JoinRelType.FULL) {
-                probeState = ProbeState.PROJECT_RIGHT;
-            }
+            probeState = getFinalProbeState();
 
             continue;
 
           case OK_NEW_SCHEMA:
             if (probeBatch.getSchema().equals(probeSchema)) {
-              doSetup(outgoingJoinBatch.getContext(), buildBatch, probeBatch, outgoingJoinBatch);
-              if (hashTable != null) {
-                hashTable.updateBatches();
-              }
+              // doSetup(outgoingJoinBatch.getContext(), buildBatch, probeBatch, outgoingJoinBatch);
+              if (hashTables != null) { for ( int i = 0; i < numPartitions; i++ ) { hashTables[i].updateBatches();} }
             } else {
               throw SchemaChangeException.schemaChanged("Hash join does not support schema changes in probe side.",
                   probeSchema,
@@ -157,30 +157,36 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
 
       // Check if we need to drain the next row in the probe side
       if (getNextRecord) {
-        if (hashTable != null && !hashTable.isEmpty()) {
-          probeIndex = hashTable.containsKey(recordsProcessed, true);
+
+        if (hashTables != null) {
+          int hashCode = hashTables[0].getProbeHashCode(recordsProcessed);
+          currBuildPart = hashCode & partitionMask ;
+          hashCode >>>= bitsInMask;
+          probeIndex = hashTables[currBuildPart].probeForKey(recordsProcessed, hashCode);
+          currHJHelper = hjHelpers[currBuildPart];
         }
 
-          if (probeIndex != -1) {
+        if (probeIndex != -1) {
 
             /* The current probe record has a key that matches. Get the index
              * of the first row in the build side that matches the current key
              */
-            currentCompositeIdx = hjHelper.getStartIndex(probeIndex);
+            currentCompositeIdx = currHJHelper.getStartIndex(probeIndex);
 
             /* Record in the build side at currentCompositeIdx has a matching record in the probe
              * side. Set the bit corresponding to this index so if we are doing a FULL or RIGHT
              * join we keep track of which records we need to project at the end
              */
-            hjHelper.setRecordMatched(currentCompositeIdx);
+            currHJHelper.setRecordMatched(currentCompositeIdx);
 
-            projectBuildRecord(currentCompositeIdx, outputRecords);
-            projectProbeRecord(recordsProcessed, outputRecords);
-            outputRecords++;
+            outputRecords =
+               outgoingJoinBatch.getContainer().appendRow(buildBatches.get(currBuildPart), currentCompositeIdx,
+                 probeBatch.getContainer(), recordsProcessed);
+
             /* Projected single row from the build side with matching key but there
              * may be more rows with the same key. Check if that's the case
              */
-            currentCompositeIdx = hjHelper.getNextIndex(currentCompositeIdx);
+            currentCompositeIdx = currHJHelper.getNextIndex(currentCompositeIdx);
             if (currentCompositeIdx == -1) {
               /* We only had one row in the build side that matched the current key
                * from the probe side. Drain the next row in the probe side.
@@ -195,20 +201,22 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
             }
         } else { // No matching key
 
-            // If we have a left outer join, project the keys
+            // If we have a left outer join, project the outer side
             if (joinType == JoinRelType.LEFT || joinType == JoinRelType.FULL) {
-              projectProbeRecord(recordsProcessed, outputRecords);
-              outputRecords++;
+
+              outputRecords =
+                outgoingJoinBatch.getContainer().appendRow(null, 0 , probeBatch.getContainer(), recordsProcessed);
             }
             recordsProcessed++;
-          }
+        }
       } else {
-        hjHelper.setRecordMatched(currentCompositeIdx);
-        projectBuildRecord(currentCompositeIdx, outputRecords);
-        projectProbeRecord(recordsProcessed, outputRecords);
-        outputRecords++;
+        currHJHelper.setRecordMatched(currentCompositeIdx);
 
-        currentCompositeIdx = hjHelper.getNextIndex(currentCompositeIdx);
+        outputRecords =
+          outgoingJoinBatch.getContainer().appendRow(buildBatches.get(currBuildPart), currentCompositeIdx,
+            probeBatch.getContainer(), recordsProcessed);
+
+        currentCompositeIdx = currHJHelper.getNextIndex(currentCompositeIdx);
 
         if (currentCompositeIdx == -1) {
           // We don't have any more rows matching the current key on the build side, move on to the next probe row
@@ -219,7 +227,7 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
     }
   }
 
-  public int probeAndProject() throws SchemaChangeException, ClassTransformationException, IOException {
+  public int probeAndProject() throws SchemaChangeException {
 
     outputRecords = 0;
 
@@ -228,26 +236,46 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
     }
 
     if (probeState == ProbeState.PROJECT_RIGHT) {
+      // Inner probe is done; now we are here because we still have a RIGHT OUTER (or a FULL) join
 
-      // We are here because we have a RIGHT OUTER or a FULL join
-      if (unmatchedBuildIndexes == null) {
-        // Initialize list of build indexes that didn't match a record on the probe side
-        unmatchedBuildIndexes = hjHelper.getNextUnmatchedIndex();
-        recordsToProcess = unmatchedBuildIndexes.size();
-        recordsProcessed = 0;
-      }
+      do {
 
-      // Project the list of unmatched records on the build side
-      executeProjectRightPhase();
+        if (unmatchedBuildIndexes == null) { // first time for this partition ?
+          if ( hjHelpers == null ) { return outputRecords; } // in case of an empty right
+          // Get this partition's list of build indexes that didn't match any record on the probe side
+          unmatchedBuildIndexes = hjHelpers[currRightPartition].getNextUnmatchedIndex();
+          recordsProcessed = 0;
+          recordsToProcess = unmatchedBuildIndexes.size();
+        }
+
+        // Project the list of unmatched records on the build side
+        executeProjectRightPhase(currRightPartition);
+
+        if ( recordsProcessed < recordsToProcess ) { // more records in this partition?
+          return outputRecords;  // outgoing is full; report and come back later
+        } else {
+          currRightPartition++; // on to the next right partition
+          unmatchedBuildIndexes = null;
+        }
+
+      }   while ( currRightPartition < numPartitions );
+
+      probeState = ProbeState.DONE; // last right partition was handled; we are done now
     }
 
     return outputRecords;
   }
 
-  public abstract void doSetup(@Named("context") FragmentContext context, @Named("buildBatch") VectorContainer buildBatch, @Named("probeBatch") RecordBatch probeBatch,
-                               @Named("outgoing") RecordBatch outgoing);
-  public abstract void projectBuildRecord(@Named("buildIndex") int buildIndex, @Named("outIndex") int outIndex);
-
-  public abstract void projectProbeRecord(@Named("probeIndex") int probeIndex, @Named("outIndex") int outIndex);
+  private ProbeState getFinalProbeState() {
+    // We are done with the (left) probe phase.
+    // If it's a RIGHT or a FULL join then need to get the unmatched indexes from the build side
+    if (joinType == JoinRelType.RIGHT) {
+      return ProbeState.PROJECT_RIGHT;
+    }
+    if (joinType == JoinRelType.FULL) {
+      return ProbeState.PROJECT_RIGHT;
+    }
+    return ProbeState.DONE;
+  }
 
 }

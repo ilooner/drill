@@ -53,15 +53,17 @@ public interface HashTable {
   static final public int BATCH_SIZE = Character.MAX_VALUE + 1;
   static final public int BATCH_MASK = 0x0000FFFF;
 
-  public void setup(HashTableConfig htConfig, FragmentContext context, BufferAllocator allocator, RecordBatch incomingBuild, RecordBatch incomingProbe, RecordBatch outgoing, VectorContainer htContainerOrig);
+  public void setup(HashTableConfig htConfig, FragmentContext context, BufferAllocator allocator, VectorContainer incomingBuild, RecordBatch incomingProbe, RecordBatch outgoing, VectorContainer htContainerOrig);
 
   public void updateBatches() throws SchemaChangeException;
 
-  public int getHashCode(int incomingRowIdx) throws SchemaChangeException;
+  public int getBuildHashCode(int incomingRowIdx) throws SchemaChangeException;
+
+  public int getProbeHashCode(int incomingRowIdx) throws SchemaChangeException;
 
   public PutStatus put(int incomingRowIdx, IndexPointer htIdxHolder, int hashCode) throws SchemaChangeException, RetryAfterSpillException;
 
-  public int containsKey(int incomingRowIdx, boolean isProbe) throws SchemaChangeException;
+  public int probeForKey(int incomingRowIdx, int hashCode) throws SchemaChangeException;
 
   public void getStats(HashTableStats stats);
 
@@ -71,7 +73,7 @@ public interface HashTable {
 
   public void clear();
 
-  public void reinit(RecordBatch newIncoming);
+  public void updateIncoming(VectorContainer newIncoming);
 
   public void reset();
 

@@ -18,6 +18,7 @@
 package org.apache.drill.exec.record;
 
 import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -42,7 +43,10 @@ public class VectorContainer implements VectorAccessible {
   private final BufferAllocator allocator;
   protected final List<VectorWrapper<?>> wrappers = Lists.newArrayList();
   private BatchSchema schema;
-  private int recordCount = -1;
+
+  private int recordCount = 0;
+  private boolean initialized = false;
+  // private BufferAllocator allocator;
   private boolean schemaChanged = true; // Schema has changed since last built. Must rebuild schema
 
   public VectorContainer() {
@@ -210,6 +214,90 @@ public class VectorContainer implements VectorAccessible {
     }
   }
 
+  /**
+    * This works with non-hyper {@link VectorContainer}s which have no selection vectors.
+    * Appends a row taken from a source {@link VectorContainer} to this {@link VectorContainer}.
+    * @param srcContainer The {@link VectorContainer} to copy a row from.
+    * @param srcIndex The index of the row to copy from the source {@link VectorContainer}.
+    * @return Position where the row was appended
+    */
+    public int appendRow(VectorContainer srcContainer, int srcIndex) {
+      for (int vectorIndex = 0; vectorIndex < wrappers.size(); vectorIndex++) {
+        ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
+        ValueVector srcVector = srcContainer.wrappers.get(vectorIndex).getValueVector();
+        destVector.copyEntry(recordCount, srcVector, srcIndex);
+      }
+      int pos = recordCount++;
+      initialized = true;
+      return pos;
+    }
+
+  /**
+   *  This method currently is only used by the Hash Join to return a row composed of build+probe rows
+   *
+   * This works with non-hyper {@link VectorContainer}s which have no selection vectors.
+   * Appends a row taken from two source {@link VectorContainer}s to this {@link VectorContainer}.
+   * @param buildSrcContainer The {@link VectorContainer} to copy the first columns of a row from.
+   * @param buildSrcIndex The index of the row to copy from the build side source {@link VectorContainer}.
+   * @param probeSrcContainer The {@link VectorContainer} to copy the last columns of a row from.
+   * @param probeSrcIndex The index of the row to copy from the probe side source {@link VectorContainer}.
+   * @return Number of records in the container after appending
+   */
+  public int appendRowXXX(VectorContainer buildSrcContainer, int buildSrcIndex, VectorContainer probeSrcContainer, int probeSrcIndex) {
+    if ( buildSrcContainer != null ) {
+      for (int vectorIndex = 0; vectorIndex < buildSrcContainer.wrappers.size(); vectorIndex++) {
+        ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
+        ValueVector srcVector = buildSrcContainer.wrappers.get(vectorIndex).getValueVector();
+        destVector.copyEntry(recordCount, srcVector, buildSrcIndex);
+      }
+    }
+    if ( probeSrcContainer != null ) {
+      int baseIndex = wrappers.size() - probeSrcContainer.wrappers.size();
+      for (int vectorIndex = baseIndex; vectorIndex < wrappers.size(); vectorIndex++) {
+        ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
+        ValueVector srcVector = probeSrcContainer.wrappers.get(vectorIndex).getValueVector();
+        destVector.copyEntry(recordCount, srcVector, probeSrcIndex);
+      }
+    }
+    recordCount++;
+    initialized = true;
+    return recordCount;
+  }
+
+  private void appendBuild(VectorContainer buildSrcContainer, int buildSrcIndex) {
+    // "- 1" to skip the last "hash values" added column
+    for (int vectorIndex = 0; vectorIndex < buildSrcContainer.wrappers.size() - 1; vectorIndex++) {
+      ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
+      ValueVector srcVector = buildSrcContainer.wrappers.get(vectorIndex).getValueVector();
+      destVector.copyEntry(recordCount, srcVector, buildSrcIndex);
+    }
+  }
+  private void appendProbe(VectorContainer probeSrcContainer, int probeSrcIndex) {
+      int baseIndex = wrappers.size() - probeSrcContainer.wrappers.size();
+      for (int vectorIndex = baseIndex; vectorIndex < wrappers.size(); vectorIndex++) {
+        ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
+        ValueVector srcVector = probeSrcContainer.wrappers.get(vectorIndex - baseIndex).getValueVector();
+        destVector.copyEntry(recordCount, srcVector, probeSrcIndex);
+      }
+  }
+  /**
+   *  A special version of appendRow for the HashJoin; uses a composite index for the build side
+   * @param buildSrcContainers Must not be null
+   * @param compositeBuildSrcIndex
+   * @param probeSrcContainer
+   * @param probeSrcIndex
+   * @return
+   */
+  public int appendRow(ArrayList<VectorContainer> buildSrcContainers, int compositeBuildSrcIndex, VectorContainer probeSrcContainer, int probeSrcIndex) {
+    int buildBatch = compositeBuildSrcIndex >>> 16;
+    int buildOffset = compositeBuildSrcIndex & 65535;
+    if ( buildSrcContainers != null ) { appendBuild(buildSrcContainers.get(buildBatch), buildOffset); }
+    if ( probeSrcContainer != null ) { appendProbe(probeSrcContainer, probeSrcIndex); }
+    recordCount++;
+    initialized = true;
+    return recordCount;
+  }
+
   public TypedFieldId add(ValueVector vv) {
     schemaChanged = true;
     schema = null;
@@ -344,7 +432,8 @@ public class VectorContainer implements VectorAccessible {
   }
 
   public void setRecordCount(int recordCount) {
-    this.recordCount = recordCount;
+      this.recordCount = recordCount;
+      initialized = true;
   }
 
   @Override
@@ -353,7 +442,7 @@ public class VectorContainer implements VectorAccessible {
     return recordCount;
   }
 
-  public boolean hasRecordCount() { return recordCount != -1; }
+  public boolean hasRecordCount() { return initialized; }
 
   @Override
   public SelectionVector2 getSelectionVector2() {
@@ -419,6 +508,7 @@ public class VectorContainer implements VectorAccessible {
     merged.wrappers.addAll(wrappers);
     merged.wrappers.addAll(otherContainer.wrappers);
     merged.schemaChanged = false;
+    merged.initialized = true;
     return merged;
   }
 
