@@ -18,12 +18,13 @@
 
 package org.apache.drill.exec.physical.impl.join;
 
-
 import org.apache.drill.categories.OperatorTest;
 import org.apache.drill.categories.UnlikelyTest;
 import org.apache.drill.exec.ExecConstants;
 import org.apache.drill.test.BaseTestQuery;
+import org.apache.drill.test.QueryTestUtil;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -31,8 +32,6 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.nio.file.Paths;
-import java.util.concurrent.ExecutorService;
-
 
 @Category(OperatorTest.class)
 public class TestHashJoinAdvanced extends JoinTestBase {
@@ -41,6 +40,8 @@ public class TestHashJoinAdvanced extends JoinTestBase {
   @BeforeClass
   public static void disableMergeJoin() throws Exception {
     dirTestWatcher.copyResourceToRoot(Paths.get("join", "empty_part"));
+    dirTestWatcher.copyFileToRoot(Paths.get("sample-data", "region.parquet"));
+    dirTestWatcher.copyFileToRoot(Paths.get("sample-data", "nation.parquet"));
     test(DISABLE_MJ);
   }
 
@@ -196,5 +197,25 @@ public class TestHashJoinAdvanced extends JoinTestBase {
     } finally {
       BaseTestQuery.resetSessionOption(ExecConstants.SLICE_TARGET);
     }
+  }
+
+  @Test // DRILL-6089
+  public void testJoinOrdering() throws Exception {
+    final String query = "select * from dfs.`sample-data/nation.parquet` nation left outer join " +
+      "(select * from dfs.`sample-data/region.parquet`) " +
+      "as region on region.r_regionkey = nation.n_nationkey order by region.r_name desc";
+    final String plan = getPlanInString("EXPLAIN PLAN for " + QueryTestUtil.normalizeQuery(query), OPTIQ_FORMAT);
+    lastSortAfterJoin(plan);
+  }
+
+  public static void lastSortAfterJoin(final String plan)
+  {
+    int sortIndex = plan.indexOf("Sort");
+
+    if (sortIndex < 0) {
+      sortIndex = Integer.MAX_VALUE;
+    }
+
+    Assert.assertTrue(sortIndex < plan.indexOf("HashJoin"));
   }
 }
