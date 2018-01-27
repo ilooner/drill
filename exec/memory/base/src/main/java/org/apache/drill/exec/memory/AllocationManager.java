@@ -305,6 +305,10 @@ public class AllocationManager {
           }
         }
       }
+
+      if (Verbosity.LOG_WITH_STACKTRACE.equals(verbosity)) {
+        historicalLog.buildHistory(sb, true);
+      }
     }
 
     private void inc() {

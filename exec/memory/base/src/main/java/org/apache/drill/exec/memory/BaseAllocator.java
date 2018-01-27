@@ -499,6 +499,7 @@ public abstract class BaseAllocator extends Accountant implements BufferAllocato
         // are there outstanding buffers?
         final int allocatedCount = childLedgers.size();
         if (allocatedCount > 0) {
+          logFirstLedgerHistory();
           throw new IllegalStateException(
               String.format("Allocator[%s] closed with outstanding buffers allocated (%d).\n%s",
                   name, allocatedCount, toString()));
@@ -854,5 +855,19 @@ public abstract class BaseAllocator extends Accountant implements BufferAllocato
       buf.getBytes(posn, buffer, 0, len);
       out.write(buffer, 0, len);
     }
+  }
+
+  private void logFirstLedgerHistory() {
+    if (childLedgers == null) {
+      return; // NOOP
+    }
+
+    for (BufferLedger ledger : childLedgers.keySet()) {
+      final StringBuilder sb = new StringBuilder();
+      ledger.print(sb, 0, Verbosity.LOG_WITH_STACKTRACE);
+      logger.error(sb.toString());
+      break; // log only one entry to minimize log size
+    }
+
   }
 }
