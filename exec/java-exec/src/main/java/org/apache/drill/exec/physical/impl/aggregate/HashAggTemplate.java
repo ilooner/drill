@@ -179,15 +179,13 @@ public abstract class HashAggTemplate implements HashAggregator {
     NUM_RESIZING,
     RESIZING_TIME_MS,
     NUM_PARTITIONS,
-    SPILLED_PARTITIONS, // number of partitions spilled to disk
+    SPILLED_PARTITIONS, // number of original partitions spilled to disk
     SPILL_MB,         // Number of MB of data spilled to disk. This amount is first written,
                       // then later re-read. So, disk I/O is twice this amount.
                       // For first phase aggr -- this is an estimate of the amount of data
                       // returned early (analogous to a spill in the 2nd phase).
     SPILL_CYCLE       // 0 - no spill, 1 - spill, 2 - SECONDARY, 3 - TERTIARY
     ;
-
-    // duplicate for hash ag
 
     @Override
     public int metricId() {
@@ -542,7 +540,7 @@ public abstract class HashAggTemplate implements HashAggregator {
     }
     // multiply by the max number of rows in a batch to get the final estimated max size
     estMaxBatchSize = Math.max(estRowWidth, estInputRowWidth) * MAX_BATCH_SIZE;
-    // (When there are no aggr functions, use '1' as later code relies on this size being non-zero)
+    // (When there are no aggr functions, use '1' as later code relies on this siisDebze being non-zero)
     estValuesBatchSize = Math.max(estValuesRowWidth, 1) * MAX_BATCH_SIZE;
     estOutgoingAllocSize = estValuesBatchSize; // initially assume same size
 

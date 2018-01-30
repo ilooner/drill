@@ -61,7 +61,7 @@ import mockit.Injectable;
 public class TestHashJoin extends PopUnitTestBase {
   //private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(TestMergeJoin.class);
 
-  @Rule public final TestRule TIMEOUT = TestTools.getTimeoutRule(100000);
+  @Rule public final TestRule TIMEOUT = TestTools.getTimeoutRule(500000);
 
   private final DrillConfig c = DrillConfig.create();
 

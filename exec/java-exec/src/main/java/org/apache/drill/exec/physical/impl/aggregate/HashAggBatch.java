@@ -228,7 +228,7 @@ public class HashAggBatch extends AbstractRecordBatch<HashAggregate> {
     ClassGenerator<HashAggregator> cgInner = cg.getInnerGenerator("BatchHolder");
     top.plainJavaCapable(true);
     // Uncomment out this line to debug the generated code.
-    // top.saveCodeForDebugging(true);
+    top.saveCodeForDebugging(true);
 
     container.clear();
 

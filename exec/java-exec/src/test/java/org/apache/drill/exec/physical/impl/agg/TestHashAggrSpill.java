@@ -83,6 +83,26 @@ public class TestHashAggrSpill extends DrillTest {
             runAndDump(client, sqlStr, expectedRows, cycle, fromPart,toPart);
         }
     }
+    @Test
+    public void TestHJSpill() throws Exception {
+      LogFixture.LogFixtureBuilder logBuilder = LogFixture.builder()
+        .toConsole()
+        .logger("org.apache.drill", Level.WARN);
+
+      ClusterFixtureBuilder builder = ClusterFixture.builder(dirTestWatcher)
+        .configProperty(ExecConstants.SYS_STORE_PROVIDER_LOCAL_ENABLE_WRITE, false)
+        .maxParallelization(1 /*maxParallel */)
+        .saveProfiles();
+      String sqlStr =  // if null then use this default query
+        "SELECT T1.empid_s16, T2.dept_i FROM `mock`.`employee_1200K` T1, `mock`.`whatever_1200K` T2 where T1.empid_s16 = T2.foo_s16";
+
+      try (LogFixture logs = logBuilder.build();
+           ClusterFixture cluster = builder.build();
+           ClientFixture client = cluster.clientFixture()) {
+        QueryBuilder.QuerySummary summary = client.queryBuilder().sql(sqlStr).run();
+        assertEquals(1_200_000, summary.recordCount());
+      }
+    }
     /**
      * Test "normal" spilling: Only 2 (or 3) partitions (out of 4) would require spilling
      * ("normal spill" means spill-cycle = 1 )

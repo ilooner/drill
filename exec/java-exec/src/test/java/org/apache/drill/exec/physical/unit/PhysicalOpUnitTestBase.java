@@ -194,6 +194,7 @@ public class PhysicalOpUnitTestBase extends ExecTest {
     private List<List<String>> inputStreamsJSON;
     private long initReservation = AbstractBase.INIT_ALLOCATION;
     private long maxAllocation = AbstractBase.MAX_ALLOCATION;
+    private Integer expectedTotalRows;
 
     @SuppressWarnings({ "unchecked", "resource" })
     public void go() {
@@ -214,9 +215,11 @@ public class PhysicalOpUnitTestBase extends ExecTest {
 
         testOperator = opCreator.getBatch(fragContext, popConfig, incomingStreams);
 
-        Map<String, List<Object>> actualSuperVectors = DrillTestWrapper.addToCombinedVectorResults(new BatchIterator(testOperator));
+        Map<String, List<Object>> actualSuperVectors = DrillTestWrapper.addToCombinedVectorResults(new BatchIterator(testOperator), expectedTotalRows);
+        if ( expectedTotalRows != null ) { return; } // when checking total rows, don't compare actual results
         Map<String, List<Object>> expectedSuperVectors = DrillTestWrapper.translateRecordListToHeapVectors(baselineRecords);
         DrillTestWrapper.compareMergedVectors(expectedSuperVectors, actualSuperVectors);
+
 
       } catch (ExecutionSetupException e) {
         throw new RuntimeException(e);
@@ -281,6 +284,11 @@ public class PhysicalOpUnitTestBase extends ExecTest {
         i++;
       }
       this.baselineRecords.add(ret);
+      return this;
+    }
+
+    public OperatorTestBuilder expectedTotalRows(Integer expectedTotalRows) {
+      this.expectedTotalRows = expectedTotalRows;
       return this;
     }
   }

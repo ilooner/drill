@@ -306,6 +306,12 @@ public class VectorContainer implements VectorAccessible {
     return new TypedFieldId(vv.getField().getType(), i);
   }
 
+  public ValueVector removeLast() {
+    int sz = wrappers.size();
+    if ( sz == 0 ) { return null; }
+    return wrappers.remove(sz - 1).getValueVector();
+  }
+
   public void add(ValueVector[] hyperVector) {
     add(hyperVector, true);
   }

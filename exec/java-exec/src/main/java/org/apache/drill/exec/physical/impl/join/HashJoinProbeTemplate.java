@@ -162,6 +162,13 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
           int hashCode = hashTables[0].getProbeHashCode(recordsProcessed);
           currBuildPart = hashCode & partitionMask ;
           hashCode >>>= bitsInMask;
+          // If the matching inner partition was spilled
+          if ( true /* isSpilledInner(currBuildPart) */ ) {
+            // add this row to its outer partition (may cause a spill, when the batch is full)
+
+            recordsProcessed++; // done with this outer record
+            continue; // on to the next outer record
+          }
           probeIndex = hashTables[currBuildPart].probeForKey(recordsProcessed, hashCode);
           currHJHelper = hjHelpers[currBuildPart];
         }
@@ -209,7 +216,9 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
             }
             recordsProcessed++;
         }
-      } else {
+      }
+      else { // match the next inner row with the same key
+
         currHJHelper.setRecordMatched(currentCompositeIdx);
 
         outputRecords =
