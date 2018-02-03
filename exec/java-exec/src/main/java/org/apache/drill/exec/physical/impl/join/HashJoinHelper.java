@@ -232,5 +232,6 @@ public class HashJoinHelper {
     for (BuildInfo info : buildInfoList) {
       info.getLinks().clear();
     }
+    buildInfoList.clear();
   }
 }

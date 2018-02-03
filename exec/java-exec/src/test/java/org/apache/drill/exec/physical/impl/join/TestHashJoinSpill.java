@@ -54,7 +54,7 @@ public class TestHashJoinSpill extends PhysicalOpUnitTestBase {
       "[{\"lft\": 0, \"a\" : \"a different string\"},{\"lft\": 0, \"a\" : \"yet another\"}]");
     List<String> rightTable = Lists.newArrayList("[{\"rgt\": 0, \"b\" : \"a string\"}]",
       "[{\"rgt\": 0, \"b\" : \"a different string\"},{\"rgt\": 0, \"b\" : \"yet another\"}]");
-    int numRows = 100; // 100_000
+    int numRows = 10_000; // 100_000
     for ( int cnt = 1; cnt <= numRows; cnt++ ) {
       leftTable.add("[{\"lft\": " + cnt + ", \"a\" : \"a string\"}]");
       rightTable.add("[{\"rgt\": " + cnt + ", \"b\" : \"a string\"}]");

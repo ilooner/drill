@@ -264,16 +264,18 @@ public class VectorContainer implements VectorAccessible {
     return recordCount;
   }
 
-  private void appendBuild(VectorContainer buildSrcContainer, int buildSrcIndex) {
+  private int appendBuild(VectorContainer buildSrcContainer, int buildSrcIndex) {
     // "- 1" to skip the last "hash values" added column
-    for (int vectorIndex = 0; vectorIndex < buildSrcContainer.wrappers.size() - 1; vectorIndex++) {
+    int lastIndex = buildSrcContainer.wrappers.size() - 1 ;
+    for (int vectorIndex = 0; vectorIndex < lastIndex; vectorIndex++) {
       ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
       ValueVector srcVector = buildSrcContainer.wrappers.get(vectorIndex).getValueVector();
       destVector.copyEntry(recordCount, srcVector, buildSrcIndex);
     }
+    return lastIndex;
   }
-  private void appendProbe(VectorContainer probeSrcContainer, int probeSrcIndex) {
-      int baseIndex = wrappers.size() - probeSrcContainer.wrappers.size();
+  private void appendProbe(VectorContainer probeSrcContainer, int probeSrcIndex, int baseIndex) {
+      // int baseIndex = wrappers.size() - probeSrcContainer.wrappers.size();
       for (int vectorIndex = baseIndex; vectorIndex < wrappers.size(); vectorIndex++) {
         ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
         ValueVector srcVector = probeSrcContainer.wrappers.get(vectorIndex - baseIndex).getValueVector();
@@ -291,8 +293,9 @@ public class VectorContainer implements VectorAccessible {
   public int appendRow(ArrayList<VectorContainer> buildSrcContainers, int compositeBuildSrcIndex, VectorContainer probeSrcContainer, int probeSrcIndex) {
     int buildBatch = compositeBuildSrcIndex >>> 16;
     int buildOffset = compositeBuildSrcIndex & 65535;
-    if ( buildSrcContainers != null ) { appendBuild(buildSrcContainers.get(buildBatch), buildOffset); }
-    if ( probeSrcContainer != null ) { appendProbe(probeSrcContainer, probeSrcIndex); }
+    int baseInd = 0;
+    if ( buildSrcContainers != null ) { baseInd = appendBuild(buildSrcContainers.get(buildBatch), buildOffset); }
+    if ( probeSrcContainer != null ) { appendProbe(probeSrcContainer, probeSrcIndex, baseInd); }
     recordCount++;
     initialized = true;
     return recordCount;
@@ -306,12 +309,11 @@ public class VectorContainer implements VectorAccessible {
     return new TypedFieldId(vv.getField().getType(), i);
   }
 
-  public ValueVector removeLast() {
+  public ValueVector getLast() {
     int sz = wrappers.size();
     if ( sz == 0 ) { return null; }
-    return wrappers.remove(sz - 1).getValueVector();
+    return wrappers.get(sz - 1).getValueVector();
   }
-
   public void add(ValueVector[] hyperVector) {
     add(hyperVector, true);
   }

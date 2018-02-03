@@ -482,12 +482,12 @@ public abstract class HashAggTemplate implements HashAggregator {
   public RecordBatch getNewIncoming() { return newIncoming; }
 
   private void initializeSetup(RecordBatch newIncoming) throws SchemaChangeException, IOException {
-    baseHashTable.updateIncoming(newIncoming); // after a spill - a new incoming
+    baseHashTable.updateIncoming(newIncoming, null); // after a spill - a new incoming
     this.incoming = newIncoming;
     currentBatchRecordCount = newIncoming.getRecordCount(); // first batch in this spill file
     nextPartitionToReturn = 0;
     for (int i = 0; i < numPartitions; i++ ) {
-      htables[i].updateIncoming(newIncoming.getContainer());
+      htables[i].updateIncoming(newIncoming.getContainer(), null);
       htables[i].reset();
       if ( batchHolders[i] != null) {
         for (BatchHolder bh : batchHolders[i]) {

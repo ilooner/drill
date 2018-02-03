@@ -73,7 +73,7 @@ public interface HashTable {
 
   public void clear();
 
-  public void updateIncoming(VectorContainer newIncoming);
+  public void updateIncoming(VectorContainer newIncoming, RecordBatch newIncomingProbe);
 
   public void reset();
 

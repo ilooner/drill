@@ -423,7 +423,7 @@ public class DrillTestWrapper {
       }
     }
     if ( expectedTotalRecords != null ) {
-      Assert.assertEquals(totalRecords, expectedTotalRecords.longValue());
+      Assert.assertEquals(expectedTotalRecords.longValue(), totalRecords);
     }
     return numBatch;
   }

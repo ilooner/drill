@@ -50,6 +50,7 @@ public class SpilledRecordbatch implements CloseableRecordBatch {
   // Path spillStreamPath;
   private String spillFile;
   VectorAccessibleSerializable vas;
+  IterOutcome initialOutcome;
 
   public SpilledRecordbatch(String spillFile,/* Path spillStreamPath,*/ int spilledBatches, FragmentContext context, BatchSchema schema, OperatorContext oContext, SpillSet spillSet) {
     this.context = context;
@@ -68,7 +69,7 @@ public class SpilledRecordbatch implements CloseableRecordBatch {
       throw UserException.resourceError(e).build(HashAggBatch.logger);
     }
 
-    next(); // initialize the container
+    initialOutcome = next(); // initialize the container
   }
 
   @Override
@@ -128,7 +129,7 @@ public class SpilledRecordbatch implements CloseableRecordBatch {
    */
   @Override
   public IterOutcome next() {
-
+System.out.println("Inside next");
     if ( ! context.shouldContinue() ) { return IterOutcome.STOP; }
 
     if ( spilledBatches <= 0 ) { // no more batches to read in this partition
@@ -161,6 +162,11 @@ public class SpilledRecordbatch implements CloseableRecordBatch {
     spilledBatches-- ; // one less batch to read
     return IterOutcome.OK;
   }
+
+  /**
+   *  Return the initial outcome (from the first next() call )
+   */
+  public IterOutcome getInitialOutcome() { return initialOutcome; }
 
   /**
    * Note: ignoring any IO errors (e.g. file not found)

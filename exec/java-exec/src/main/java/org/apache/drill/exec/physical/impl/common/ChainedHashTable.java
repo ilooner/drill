@@ -116,7 +116,7 @@ public class ChainedHashTable {
   private final FragmentContext context;
   private final BufferAllocator allocator;
   private RecordBatch incomingBuild;
-  private final RecordBatch incomingProbe;
+  private RecordBatch incomingProbe;
   private final RecordBatch outgoing;
 
   public ChainedHashTable(HashTableConfig htConfig, FragmentContext context, BufferAllocator allocator,
@@ -130,8 +130,9 @@ public class ChainedHashTable {
     this.outgoing = outgoing;
   }
 
-  public void updateIncoming(RecordBatch incomingBuild) {
+  public void updateIncoming(RecordBatch incomingBuild, RecordBatch incomingProbe) {
     this.incomingBuild = incomingBuild;
+    this.incomingProbe = incomingProbe;
   }
 
   public HashTable createAndSetupHashTable(TypedFieldId[] outKeyFieldIds) throws ClassTransformationException,

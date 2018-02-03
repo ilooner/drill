@@ -809,8 +809,9 @@ public abstract class HashTableTemplate implements HashTable {
     batchHolders = new ArrayList<BatchHolder>();
     startIndices = allocMetadataVector(originalTableSize, EMPTY_SLOT);
   }
-  public void updateIncoming(VectorContainer newIncoming) {
+  public void updateIncoming(VectorContainer newIncoming, RecordBatch newIncomingProbe) {
     incomingBuild = newIncoming;
+    incomingProbe = newIncomingProbe;
     // reset();
     try {
       updateBatches();  // Needed to update the value vectors in the generated code with the new incoming
