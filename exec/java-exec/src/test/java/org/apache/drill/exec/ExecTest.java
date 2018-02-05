@@ -59,7 +59,7 @@ import static org.mockito.Mockito.when;
 public class ExecTest extends DrillTest {
 
   @ClassRule
-  public static final BaseDirTestWatcher dirTestWatcher = new BaseDirTestWatcher();
+  public static final BaseDirTestWatcher dirTestWatcher = new BaseDirTestWatcher(false);
 
   protected static SystemOptionManager optionManager;
   static {
