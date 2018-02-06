@@ -50,7 +50,7 @@ public class SpilledRecordbatch implements CloseableRecordBatch {
   // Path spillStreamPath;
   private String spillFile;
   VectorAccessibleSerializable vas;
-  IterOutcome initialOutcome;
+  private IterOutcome initialOutcome;
 
   public SpilledRecordbatch(String spillFile,/* Path spillStreamPath,*/ int spilledBatches, FragmentContext context, BatchSchema schema, OperatorContext oContext, SpillSet spillSet) {
     this.context = context;
@@ -129,7 +129,6 @@ public class SpilledRecordbatch implements CloseableRecordBatch {
    */
   @Override
   public IterOutcome next() {
-System.out.println("Inside next");
     if ( ! context.shouldContinue() ) { return IterOutcome.STOP; }
 
     if ( spilledBatches <= 0 ) { // no more batches to read in this partition
@@ -150,10 +149,12 @@ System.out.println("Inside next");
         // Pass our container to the reader because other classes (e.g. HashAggBatch, HashTable)
         // may have a reference to this container (as an "incoming")
         vas.readFromStreamWithContainer(container, spillStream);
+        // System.out.format("Inside next: Got %d recs. HV size %d%n",container.getRecordCount(),container.getLast().getAccessor().getValueCount());
       }
       else { // first time - create a container
         vas.readFromStream(spillStream);
         container = vas.get();
+        // System.out.format("First time Inside next: Got %d recs. HV size %d%n",container.getRecordCount(),container.getLast().getAccessor().getValueCount());
       }
     } catch (IOException e) {
       throw UserException.dataReadError(e).addContext("Failed reading from a spill file").build(HashAggTemplate.logger);
