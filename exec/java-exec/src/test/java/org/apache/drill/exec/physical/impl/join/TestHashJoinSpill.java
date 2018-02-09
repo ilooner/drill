@@ -20,6 +20,8 @@ package org.apache.drill.exec.physical.impl.join;
 
 import com.google.common.collect.Lists;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.drill.categories.OperatorTest;
+import org.apache.drill.categories.SlowTest;
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.expression.SchemaPath;
 
@@ -36,11 +38,13 @@ import org.apache.drill.exec.util.JsonStringArrayList;
 import org.apache.drill.exec.util.JsonStringHashMap;
 import org.apache.drill.exec.util.Text;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+@Category({SlowTest.class, OperatorTest.class})
 public class TestHashJoinSpill extends PhysicalOpUnitTestBase {
 
 
@@ -54,10 +58,58 @@ public class TestHashJoinSpill extends PhysicalOpUnitTestBase {
       "[{\"lft\": 0, \"a\" : \"a different string\"},{\"lft\": 0, \"a\" : \"yet another\"}]");
     List<String> rightTable = Lists.newArrayList("[{\"rgt\": 0, \"b\" : \"a string\"}]",
       "[{\"rgt\": 0, \"b\" : \"a different string\"},{\"rgt\": 0, \"b\" : \"yet another\"}]");
-    int numRows = 10_000; // 100_000
+    int numRows = 60_000; // 100_000
     for ( int cnt = 1; cnt <= numRows; cnt++ ) {
       leftTable.add("[{\"lft\": " + cnt + ", \"a\" : \"a string\"}]");
       rightTable.add("[{\"rgt\": " + cnt + ", \"b\" : \"a string\"}]");
+    }
+
+    opTestBuilder()
+      .physicalOperator(joinConf)
+      .inputDataStreamsJson(Lists.newArrayList(leftTable,rightTable))
+      .baselineColumns("lft", "a", "b", "rgt")
+      .expectedTotalRows( numRows + 9 )
+      .go();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void testRightOuterHashJoinSpill() {
+    HashJoinPOP joinConf = new HashJoinPOP(null, null,
+      Lists.newArrayList(joinCond("lft", "EQUALS", "rgt")), JoinRelType.RIGHT);
+    // Put some duplicate values
+    List<String> leftTable = Lists.newArrayList("[{\"lft\": 0, \"a\" : \"a string\"}]",
+      "[{\"lft\": 0, \"a\" : \"a different string\"},{\"lft\": 0, \"a\" : \"yet another\"}]");
+    List<String> rightTable = Lists.newArrayList("[{\"rgt\": 0, \"b\" : \"a string\"}]",
+      "[{\"rgt\": 0, \"b\" : \"a different string\"},{\"rgt\": 0, \"b\" : \"yet another\"}]");
+    int numRows = 10_000; // 100_000
+    for ( int cnt = 1; cnt <= numRows; cnt++ ) {
+      // leftTable.add("[{\"lft\": " + cnt + ", \"a\" : \"a string\"}]");
+      rightTable.add("[{\"rgt\": " + cnt + ", \"b\" : \"a string\"}]");
+    }
+
+    opTestBuilder()
+      .physicalOperator(joinConf)
+      .inputDataStreamsJson(Lists.newArrayList(leftTable,rightTable))
+      .baselineColumns("lft", "a", "b", "rgt")
+      .expectedTotalRows( numRows + 9 )
+      .go();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void testLeftOuterHashJoinSpill() {
+    HashJoinPOP joinConf = new HashJoinPOP(null, null,
+      Lists.newArrayList(joinCond("lft", "EQUALS", "rgt")), JoinRelType.LEFT);
+    // Put some duplicate values
+    List<String> leftTable = Lists.newArrayList("[{\"lft\": 0, \"a\" : \"a string\"}]",
+      "[{\"lft\": 0, \"a\" : \"a different string\"},{\"lft\": 0, \"a\" : \"yet another\"}]");
+    List<String> rightTable = Lists.newArrayList("[{\"rgt\": 0, \"b\" : \"a string\"}]",
+      "[{\"rgt\": 0, \"b\" : \"a different string\"},{\"rgt\": 0, \"b\" : \"yet another\"}]");
+    int numRows = 10_000; // 100_000
+    for ( int cnt = 1; cnt <= numRows; cnt++ ) {
+      leftTable.add("[{\"lft\": " + cnt + ", \"a\" : \"a string\"}]");
+      // rightTable.add("[{\"rgt\": " + cnt + ", \"b\" : \"a string\"}]");
     }
 
     opTestBuilder()

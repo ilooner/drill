@@ -104,6 +104,9 @@ public class HashJoinHelper {
     public BitSet getKeyMatchBitVector() {
       return keyMatchBitVector;
     }
+    public void clear() {
+      keyMatchBitVector.clear();
+    }
   }
 
   public SelectionVector4 getNewSV4(int recordCount) throws SchemaChangeException {

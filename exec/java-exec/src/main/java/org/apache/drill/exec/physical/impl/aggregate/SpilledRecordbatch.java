@@ -149,12 +149,10 @@ public class SpilledRecordbatch implements CloseableRecordBatch {
         // Pass our container to the reader because other classes (e.g. HashAggBatch, HashTable)
         // may have a reference to this container (as an "incoming")
         vas.readFromStreamWithContainer(container, spillStream);
-        // System.out.format("Inside next: Got %d recs. HV size %d%n",container.getRecordCount(),container.getLast().getAccessor().getValueCount());
       }
       else { // first time - create a container
         vas.readFromStream(spillStream);
         container = vas.get();
-        // System.out.format("First time Inside next: Got %d recs. HV size %d%n",container.getRecordCount(),container.getLast().getAccessor().getValueCount());
       }
     } catch (IOException e) {
       throw UserException.dataReadError(e).addContext("Failed reading from a spill file").build(HashAggTemplate.logger);

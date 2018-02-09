@@ -284,11 +284,11 @@ public class VectorContainer implements VectorAccessible {
   }
   /**
    *  A special version of appendRow for the HashJoin; uses a composite index for the build side
-   * @param buildSrcContainers Must not be null
-   * @param compositeBuildSrcIndex
-   * @param probeSrcContainer
-   * @param probeSrcIndex
-   * @return
+   * @param buildSrcContainers The containers list for the right side
+   * @param compositeBuildSrcIndex Composite build index
+   * @param probeSrcContainer The single container for the left/outer side
+   * @param probeSrcIndex Index in the outer container
+   * @return Number of rows in this container (after the append)
    */
   public int appendRow(ArrayList<VectorContainer> buildSrcContainers, int compositeBuildSrcIndex, VectorContainer probeSrcContainer, int probeSrcIndex) {
     int buildBatch = compositeBuildSrcIndex >>> 16;
@@ -296,6 +296,22 @@ public class VectorContainer implements VectorAccessible {
     int baseInd = 0;
     if ( buildSrcContainers != null ) { baseInd = appendBuild(buildSrcContainers.get(buildBatch), buildOffset); }
     if ( probeSrcContainer != null ) { appendProbe(probeSrcContainer, probeSrcIndex, baseInd); }
+    recordCount++;
+    initialized = true;
+    return recordCount;
+  }
+
+  /**
+   * A customised version of the special appendRow for HashJoin - used for Left
+   * Outer Join when there is no build side match - hence need a base index in
+   * this container's wrappers from where to start appending
+   * @param probeSrcContainer
+   * @param probeSrcIndex
+   * @param baseInd - index of this container's wrapper to start at
+   * @return
+   */
+  public int appendOuterRow(VectorContainer probeSrcContainer, int probeSrcIndex, int baseInd) {
+    appendProbe(probeSrcContainer, probeSrcIndex, baseInd);
     recordCount++;
     initialized = true;
     return recordCount;
