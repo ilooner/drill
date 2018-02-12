@@ -287,4 +287,21 @@ public abstract class DrillRelOptUtil {
     }
     return false;
   }
+
+  public static boolean isProjectFlatten(RelNode project) {
+
+    assert project instanceof Project : "Rel is NOT an instance of project!";
+
+    for (RexNode rex : project.getChildExps()) {
+      RexNode newExpr = rex;
+      if (rex instanceof RexCall) {
+        RexCall function = (RexCall) rex;
+        String functionName = function.getOperator().getName();
+        if (functionName.equalsIgnoreCase("flatten") ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 }

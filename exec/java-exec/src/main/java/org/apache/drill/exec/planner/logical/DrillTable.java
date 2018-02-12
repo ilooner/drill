@@ -85,6 +85,10 @@ public abstract class DrillTable implements Table {
     this(storageEngineName, plugin, ImpersonationUtil.getProcessUserName(), selection);
   }
 
+  public void setGroupScan(GroupScan scan) {
+    this.scan = scan;
+  }
+
   public GroupScan getGroupScan() throws IOException{
     if (scan == null) {
       if (selection instanceof FileSelection && ((FileSelection) selection).isEmptyDirectory()) {

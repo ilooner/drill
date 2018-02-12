@@ -414,9 +414,9 @@ public final class UserBitShared {
      */
     UNORDERED_RECEIVER(11, 11),
     /**
-     * <code>RANGE_SENDER = 12;</code>
+     * <code>RANGE_PARTITION_SENDER = 12;</code>
      */
-    RANGE_SENDER(12, 12),
+    RANGE_PARTITION_SENDER(12, 12),
     /**
      * <code>SCREEN = 13;</code>
      */
@@ -525,6 +525,14 @@ public final class UserBitShared {
      * <code>KUDU_SUB_SCAN = 39;</code>
      */
     KUDU_SUB_SCAN(39, 39),
+    /**
+     * <code>MAPRDB_SUB_SCAN = 40;</code>
+     */
+    MAPRDB_SUB_SCAN(40, 40),
+    /**
+     * <code>ROWKEY_JOIN = 41;</code>
+     */
+    ROWKEY_JOIN(41, 41),
     ;
 
     /**
@@ -576,9 +584,9 @@ public final class UserBitShared {
      */
     public static final int UNORDERED_RECEIVER_VALUE = 11;
     /**
-     * <code>RANGE_SENDER = 12;</code>
+     * <code>RANGE_PARTITION_SENDER = 12;</code>
      */
-    public static final int RANGE_SENDER_VALUE = 12;
+    public static final int RANGE_PARTITION_SENDER_VALUE = 12;
     /**
      * <code>SCREEN = 13;</code>
      */
@@ -687,6 +695,14 @@ public final class UserBitShared {
      * <code>KUDU_SUB_SCAN = 39;</code>
      */
     public static final int KUDU_SUB_SCAN_VALUE = 39;
+    /**
+     * <code>MAPRDB_SUB_SCAN = 40;</code>
+     */
+    public static final int MAPRDB_SUB_SCAN_VALUE = 40;
+    /**
+     * <code>ROWKEY_JOIN = 41;</code>
+     */
+    public static final int ROWKEY_JOIN_VALUE = 41;
 
 
     public final int getNumber() { return value; }
@@ -705,7 +721,7 @@ public final class UserBitShared {
         case 9: return ORDERED_PARTITION_SENDER;
         case 10: return PROJECT;
         case 11: return UNORDERED_RECEIVER;
-        case 12: return RANGE_SENDER;
+        case 12: return RANGE_PARTITION_SENDER;
         case 13: return SCREEN;
         case 14: return SELECTION_VECTOR_REMOVER;
         case 15: return STREAMING_AGGREGATE;
@@ -733,6 +749,8 @@ public final class UserBitShared {
         case 37: return PCAP_SUB_SCAN;
         case 38: return KAFKA_SUB_SCAN;
         case 39: return KUDU_SUB_SCAN;
+        case 40: return MAPRDB_SUB_SCAN;
+        case 41: return ROWKEY_JOIN;
         default: return null;
       }
     }
@@ -24113,30 +24131,32 @@ public final class UserBitShared {
       "agmentState\022\013\n\007SENDING\020\000\022\027\n\023AWAITING_ALL" +
       "OCATION\020\001\022\013\n\007RUNNING\020\002\022\014\n\010FINISHED\020\003\022\r\n\t" +
       "CANCELLED\020\004\022\n\n\006FAILED\020\005\022\032\n\026CANCELLATION_" +
-      "REQUESTED\020\006*\227\006\n\020CoreOperatorType\022\021\n\rSING" +
+      "REQUESTED\020\006*\307\006\n\020CoreOperatorType\022\021\n\rSING" +
       "LE_SENDER\020\000\022\024\n\020BROADCAST_SENDER\020\001\022\n\n\006FIL" +
       "TER\020\002\022\022\n\016HASH_AGGREGATE\020\003\022\r\n\tHASH_JOIN\020\004" +
       "\022\016\n\nMERGE_JOIN\020\005\022\031\n\025HASH_PARTITION_SENDE" +
       "R\020\006\022\t\n\005LIMIT\020\007\022\024\n\020MERGING_RECEIVER\020\010\022\034\n\030" +
       "ORDERED_PARTITION_SENDER\020\t\022\013\n\007PROJECT\020\n\022" +
-      "\026\n\022UNORDERED_RECEIVER\020\013\022\020\n\014RANGE_SENDER\020",
-      "\014\022\n\n\006SCREEN\020\r\022\034\n\030SELECTION_VECTOR_REMOVE" +
-      "R\020\016\022\027\n\023STREAMING_AGGREGATE\020\017\022\016\n\nTOP_N_SO" +
-      "RT\020\020\022\021\n\rEXTERNAL_SORT\020\021\022\t\n\005TRACE\020\022\022\t\n\005UN" +
-      "ION\020\023\022\014\n\010OLD_SORT\020\024\022\032\n\026PARQUET_ROW_GROUP" +
-      "_SCAN\020\025\022\021\n\rHIVE_SUB_SCAN\020\026\022\025\n\021SYSTEM_TAB" +
-      "LE_SCAN\020\027\022\021\n\rMOCK_SUB_SCAN\020\030\022\022\n\016PARQUET_" +
-      "WRITER\020\031\022\023\n\017DIRECT_SUB_SCAN\020\032\022\017\n\013TEXT_WR" +
-      "ITER\020\033\022\021\n\rTEXT_SUB_SCAN\020\034\022\021\n\rJSON_SUB_SC" +
-      "AN\020\035\022\030\n\024INFO_SCHEMA_SUB_SCAN\020\036\022\023\n\017COMPLE" +
-      "X_TO_JSON\020\037\022\025\n\021PRODUCER_CONSUMER\020 \022\022\n\016HB",
-      "ASE_SUB_SCAN\020!\022\n\n\006WINDOW\020\"\022\024\n\020NESTED_LOO" +
-      "P_JOIN\020#\022\021\n\rAVRO_SUB_SCAN\020$\022\021\n\rPCAP_SUB_" +
-      "SCAN\020%\022\022\n\016KAFKA_SUB_SCAN\020&\022\021\n\rKUDU_SUB_S" +
-      "CAN\020\'*g\n\nSaslStatus\022\020\n\014SASL_UNKNOWN\020\000\022\016\n" +
-      "\nSASL_START\020\001\022\024\n\020SASL_IN_PROGRESS\020\002\022\020\n\014S" +
-      "ASL_SUCCESS\020\003\022\017\n\013SASL_FAILED\020\004B.\n\033org.ap" +
-      "ache.drill.exec.protoB\rUserBitSharedH\001"
+      "\026\n\022UNORDERED_RECEIVER\020\013\022\032\n\026RANGE_PARTITI",
+      "ON_SENDER\020\014\022\n\n\006SCREEN\020\r\022\034\n\030SELECTION_VEC" +
+      "TOR_REMOVER\020\016\022\027\n\023STREAMING_AGGREGATE\020\017\022\016" +
+      "\n\nTOP_N_SORT\020\020\022\021\n\rEXTERNAL_SORT\020\021\022\t\n\005TRA" +
+      "CE\020\022\022\t\n\005UNION\020\023\022\014\n\010OLD_SORT\020\024\022\032\n\026PARQUET" +
+      "_ROW_GROUP_SCAN\020\025\022\021\n\rHIVE_SUB_SCAN\020\026\022\025\n\021" +
+      "SYSTEM_TABLE_SCAN\020\027\022\021\n\rMOCK_SUB_SCAN\020\030\022\022" +
+      "\n\016PARQUET_WRITER\020\031\022\023\n\017DIRECT_SUB_SCAN\020\032\022" +
+      "\017\n\013TEXT_WRITER\020\033\022\021\n\rTEXT_SUB_SCAN\020\034\022\021\n\rJ" +
+      "SON_SUB_SCAN\020\035\022\030\n\024INFO_SCHEMA_SUB_SCAN\020\036" +
+      "\022\023\n\017COMPLEX_TO_JSON\020\037\022\025\n\021PRODUCER_CONSUM",
+      "ER\020 \022\022\n\016HBASE_SUB_SCAN\020!\022\n\n\006WINDOW\020\"\022\024\n\020" +
+      "NESTED_LOOP_JOIN\020#\022\021\n\rAVRO_SUB_SCAN\020$\022\021\n" +
+      "\rPCAP_SUB_SCAN\020%\022\022\n\016KAFKA_SUB_SCAN\020&\022\021\n\r" +
+      "KUDU_SUB_SCAN\020\'\022\023\n\017MAPRDB_SUB_SCAN\020(\022\017\n\013" +
+      "ROWKEY_JOIN\020)*g\n\nSaslStatus\022\020\n\014SASL_UNKN" +
+      "OWN\020\000\022\016\n\nSASL_START\020\001\022\024\n\020SASL_IN_PROGRES" +
+      "S\020\002\022\020\n\014SASL_SUCCESS\020\003\022\017\n\013SASL_FAILED\020\004B." +
+      "\n\033org.apache.drill.exec.protoB\rUserBitSh" +
+      "aredH\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {

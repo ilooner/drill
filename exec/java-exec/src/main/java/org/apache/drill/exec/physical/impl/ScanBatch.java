@@ -80,6 +80,10 @@ public class ScanBatch implements CloseableRecordBatch {
   private final BufferAllocator allocator;
   private final List<Map<String, String>> implicitColumnList;
   private String currentReaderClassName;
+
+  private List<RecordReader> readerList = null; // needed for repeatable scanners
+  private boolean isRepeatableScan = false;     // needed for repeatable scanners
+
   /**
    *
    * @param context
@@ -127,6 +131,15 @@ public class ScanBatch implements CloseableRecordBatch {
       throws ExecutionSetupException {
     this(context, context.newOperatorContext(subScanConfig),
         readers, Collections.<Map<String, String>> emptyList());
+  }
+
+  public ScanBatch(PhysicalOperator subScanConfig, FragmentContext context,
+                   List<RecordReader> readerList, boolean isRepeatableScan)
+      throws ExecutionSetupException {
+    this(context, context.newOperatorContext(subScanConfig),
+        readerList, Collections.<Map<String, String>> emptyList());
+    this.readerList = readerList;
+    this.isRepeatableScan = isRepeatableScan;
   }
 
   @Override
