@@ -22,15 +22,15 @@ import org.apache.drill.common.expression.FunctionCall;
 import org.apache.drill.common.expression.LogicalExpression;
 import org.apache.drill.common.expression.visitors.AbstractExprVisitor;
 import org.apache.drill.exec.store.hbase.DrillHBaseConstants;
-import org.apache.drill.exec.store.mapr.db.util.FieldPathHelper;
 import org.ojai.Value;
 import org.ojai.store.QueryCondition;
 import org.ojai.store.QueryCondition.Op;
 
 import com.google.common.collect.ImmutableList;
-import com.mapr.db.MapRDB;
+import com.mapr.db.impl.MapRDBImpl;
 
 public class JsonConditionBuilder extends AbstractExprVisitor<JsonScanSpec, Void, RuntimeException> implements DrillHBaseConstants {
+//  private final static org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(JsonConditionBuilder.class);
 
   final private JsonTableGroupScan groupScan;
 
@@ -48,6 +48,12 @@ public class JsonConditionBuilder extends AbstractExprVisitor<JsonScanSpec, Void
     JsonScanSpec parsedSpec = le.accept(this, null);
     if (parsedSpec != null) {
       parsedSpec.mergeScanSpec("booleanAnd", this.groupScan.getScanSpec());
+      // QueryCondition c = parsedSpec.getCondition();
+      // TODO(Garik): Implement checkAndPrune()
+      /*
+      if (c != null)
+        ((ConditionImpl)c).checkAndPrune();
+      */
     }
     return parsedSpec;
   }
@@ -88,14 +94,27 @@ public class JsonConditionBuilder extends AbstractExprVisitor<JsonScanSpec, Void
           JsonScanSpec nextScanSpec = args.get(i).accept(this, null);
           if (nodeScanSpec != null && nextScanSpec != null) {
             nodeScanSpec.mergeScanSpec(functionName, nextScanSpec);
-        } else {
-          allExpressionsConverted = false;
-          if ("booleanAnd".equals(functionName)) {
+          } else {
+            allExpressionsConverted = false;
+            if ("booleanAnd".equals(functionName)) {
               nodeScanSpec = nodeScanSpec == null ? nextScanSpec : nodeScanSpec;
             }
           }
         }
         break;
+
+      case "ojai_sizeof":
+      case "ojai_typeof":
+      case "ojai_nottypeof":
+      case "ojai_matches":
+      case "ojai_notmatches":
+      case "ojai_condition": {
+        final OjaiFunctionsProcessor processor = OjaiFunctionsProcessor.process(call);
+        if (processor != null) {
+                return new JsonScanSpec(groupScan.getTableName(), groupScan.getIndexDesc(),
+                                processor.getCondition());
+        }
+      }
       }
     }
 
@@ -159,80 +178,76 @@ public class JsonConditionBuilder extends AbstractExprVisitor<JsonScanSpec, Void
   private JsonScanSpec createJsonScanSpec(FunctionCall call,
       CompareFunctionsProcessor processor) {
     String functionName = processor.getFunctionName();
-    String fieldPath = FieldPathHelper.schemaPathToFieldPath(processor.getPath()).asPathString();
+    String fieldPath = FieldPathHelper.schemaPath2FieldPath(processor.getPath()).asPathString();
     Value fieldValue = processor.getValue();
 
     QueryCondition cond = null;
     switch (functionName) {
     case "equal":
-      cond = MapRDB.newCondition();
+      cond = MapRDBImpl.newCondition();
       setIsCondition(cond, fieldPath, Op.EQUAL, fieldValue);
-      cond.build();
       break;
 
     case "not_equal":
-      cond = MapRDB.newCondition();
+      cond = MapRDBImpl.newCondition();
       setIsCondition(cond, fieldPath, Op.NOT_EQUAL, fieldValue);
-      cond.build();
       break;
 
     case "less_than":
-      cond = MapRDB.newCondition();
+      cond = MapRDBImpl.newCondition();
       setIsCondition(cond, fieldPath, Op.LESS, fieldValue);
-      cond.build();
       break;
 
     case "less_than_or_equal_to":
-      cond = MapRDB.newCondition();
+      cond = MapRDBImpl.newCondition();
       setIsCondition(cond, fieldPath, Op.LESS_OR_EQUAL, fieldValue);
-      cond.build();
       break;
 
     case "greater_than":
-      cond = MapRDB.newCondition();
+      cond = MapRDBImpl.newCondition();
       setIsCondition(cond, fieldPath, Op.GREATER, fieldValue);
-      cond.build();
       break;
 
     case "greater_than_or_equal_to":
-      cond = MapRDB.newCondition();
+      cond = MapRDBImpl.newCondition();
       setIsCondition(cond, fieldPath, Op.GREATER_OR_EQUAL, fieldValue);
-      cond.build();
       break;
 
     case "isnull":
-      cond = MapRDB.newCondition().notExists(fieldPath).build();
+      cond = MapRDBImpl.newCondition().notExists(fieldPath);
       break;
 
     case "isnotnull":
-      cond = MapRDB.newCondition().exists(fieldPath).build();
+      cond = MapRDBImpl.newCondition().exists(fieldPath);
       break;
 
     case "istrue":
-      cond = MapRDB.newCondition().is(fieldPath, Op.EQUAL, true).build();
+      cond = MapRDBImpl.newCondition().is(fieldPath, Op.EQUAL, true);
       break;
 
     case "isnotfalse":
-      cond = MapRDB.newCondition().is(fieldPath, Op.NOT_EQUAL, false).build();
+      cond = MapRDBImpl.newCondition().is(fieldPath, Op.NOT_EQUAL, false);
       break;
 
     case "isfalse":
-      cond = MapRDB.newCondition().is(fieldPath, Op.EQUAL, false).build();
+      cond = MapRDBImpl.newCondition().is(fieldPath, Op.EQUAL, false);
       break;
 
     case "isnottrue":
-      cond = MapRDB.newCondition().is(fieldPath, Op.NOT_EQUAL, true).build();
+      cond = MapRDBImpl.newCondition().is(fieldPath, Op.NOT_EQUAL, true);
       break;
 
     case "like":
-      cond = MapRDB.newCondition().like(fieldPath, fieldValue.getString()).build();
+      cond = MapRDBImpl.newCondition().like(fieldPath, fieldValue.getString());
       break;
 
     default:
     }
 
     if (cond != null) {
-      return new JsonScanSpec(groupScan.getTableName(), cond);
+      return new JsonScanSpec(groupScan.getTableName(),
+                              groupScan.getIndexDesc(),
+                              cond.build());
     }
 
     return null;
