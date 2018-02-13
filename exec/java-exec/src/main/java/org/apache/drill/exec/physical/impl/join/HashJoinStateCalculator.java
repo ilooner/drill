@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,25 +15,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.drill.exec.vector;
+package org.apache.drill.exec.physical.impl.join;
 
-public interface FixedWidthVector extends ValueVector {
+import javax.annotation.Nullable;
+
+/**
+ * A {@link HashJoinStateCalculator} is a piece of code that compute the memory requirements for one of the states
+ * in the {@link HashJoinState} enum.
+ */
+public interface HashJoinStateCalculator<T extends HashJoinStateCalculator> {
+  /**
+   * Signifies that the current state is complete and returns the next {@link HashJoinStateCalculator}.
+   * Returns null in the case where there is no next state.
+   * @return The next {@link HashJoinStateCalculator} or null if this was the last state.
+   */
+  @Nullable
+  T next();
 
   /**
-   * Allocate a new memory space for this vector.  Must be called prior to using the ValueVector.
-   *
-   * @param valueCount   Number of values in the vector.
+   * The current {@link HashJoinState} corresponding to this calculator.
+   * @return
    */
-  void allocateNew(int valueCount);
-
-  /**
-   * Zero out the underlying buffer backing this vector.
-   */
-  void zeroVector();
-
-  /**
-   * The width of a record in bytes.
-   * @return The width of a record in bytes.
-   */
-  int getValueWidth();
+  HashJoinState getState();
 }
