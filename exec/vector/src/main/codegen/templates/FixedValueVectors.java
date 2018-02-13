@@ -304,7 +304,12 @@ public final class ${minor.class}Vector extends BaseDataValueVector implements F
     return valueCount * ${type.width};
   }
 
-  private class TransferImpl implements TransferPair{
+  @Override
+  public int getValueWidth() {
+    return ${type.width};
+  }
+
+  private class TransferImpl implements TransferPair {
     private ${minor.class}Vector to;
 
     public TransferImpl(MaterializedField field, BufferAllocator allocator){

@@ -606,6 +606,20 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     values.collectLedgers(ledgers);
   }
 
+  @Override
+  public int getPayloadByteCount(int valueCount) {
+    // For nullable, we include all values, null or not, in computing
+    // the value length.
+    return bits.getPayloadByteCount(valueCount) + values.getPayloadByteCount(valueCount);
+  }
+
+  <#if type.major != "VarLen">
+  @Override
+  public int getValueWidth(){
+    return bits.getValueWidth() + ${type.width};
+  }
+  </#if>
+
   <#if type.major == "VarLen">
   /** {@inheritDoc} */
   @Override
