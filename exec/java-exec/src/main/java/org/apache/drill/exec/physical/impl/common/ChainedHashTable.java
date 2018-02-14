@@ -116,7 +116,7 @@ public class ChainedHashTable {
   private final FragmentContext context;
   private final BufferAllocator allocator;
   private RecordBatch incomingBuild;
-  private final RecordBatch incomingProbe;
+  private RecordBatch incomingProbe;
   private final RecordBatch outgoing;
 
   public ChainedHashTable(HashTableConfig htConfig, FragmentContext context, BufferAllocator allocator,
@@ -130,11 +130,12 @@ public class ChainedHashTable {
     this.outgoing = outgoing;
   }
 
-  public void updateIncoming(RecordBatch incomingBuild) {
+  public void updateIncoming(RecordBatch incomingBuild, RecordBatch incomingProbe) {
     this.incomingBuild = incomingBuild;
+    this.incomingProbe = incomingProbe;
   }
 
-  public HashTable createAndSetupHashTable(TypedFieldId[] outKeyFieldIds, int numPartitions) throws ClassTransformationException,
+  public HashTable createAndSetupHashTable(TypedFieldId[] outKeyFieldIds) throws ClassTransformationException,
       IOException, SchemaChangeException {
     CodeGenerator<HashTable> top = CodeGenerator.get(HashTable.TEMPLATE_DEFINITION, context.getOptions());
     top.plainJavaCapable(true);
@@ -225,7 +226,7 @@ public class ChainedHashTable {
     setupGetHash(cg /* use top level code generator for getHash */, GetHashIncomingProbeMapping, incomingProbe, keyExprsProbe, true);
 
     HashTable ht = context.getImplementationClass(top);
-    ht.setup(htConfig, allocator, incomingBuild, incomingProbe, outgoing, htContainerOrig);
+    ht.setup(htConfig, allocator, incomingBuild.getContainer(), incomingProbe, outgoing, htContainerOrig);
 
     return ht;
   }
