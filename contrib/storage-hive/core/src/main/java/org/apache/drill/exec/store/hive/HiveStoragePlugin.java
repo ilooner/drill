@@ -57,14 +57,12 @@ public class HiveStoragePlugin extends AbstractStoragePlugin {
 
   private final HiveStoragePluginConfig config;
   private HiveSchemaFactory schemaFactory;
-  private final DrillbitContext context;
-  private final String name;
   private final HiveConf hiveConf;
 
-  public HiveStoragePlugin(HiveStoragePluginConfig config, DrillbitContext context, String name) throws ExecutionSetupException {
+  public HiveStoragePlugin(HiveStoragePluginConfig config, DrillbitContext context, String name)
+      throws ExecutionSetupException {
+    super(context, name);
     this.config = config;
-    this.context = context;
-    this.name = name;
     this.hiveConf = createHiveConf(config.getHiveConfigOverride());
     this.schemaFactory = new HiveSchemaFactory(this, name, hiveConf);
   }
@@ -75,14 +73,6 @@ public class HiveStoragePlugin extends AbstractStoragePlugin {
 
   public HiveStoragePluginConfig getConfig() {
     return config;
-  }
-
-  public String getName(){
-    return name;
-  }
-
-  public DrillbitContext getContext() {
-    return context;
   }
 
   @Override
@@ -152,7 +142,7 @@ public class HiveStoragePlugin extends AbstractStoragePlugin {
       logger.warn("Schema factory forced close failed, error ignored", t);
     }
     try {
-      schemaFactory = new HiveSchemaFactory(this, name, hiveConf);
+      schemaFactory = new HiveSchemaFactory(this, getName(), hiveConf);
     } catch (ExecutionSetupException e) {
       throw new DrillRuntimeException(e);
     }

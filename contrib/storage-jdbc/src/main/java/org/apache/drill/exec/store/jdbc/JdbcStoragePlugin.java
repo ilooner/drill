@@ -77,17 +77,14 @@ public class JdbcStoragePlugin extends AbstractStoragePlugin {
 
 
   private final JdbcStorageConfig config;
-  private final DrillbitContext context;
   private final DataSource source;
-  private final String name;
   private final SqlDialect dialect;
   private final DrillJdbcConvention convention;
 
 
   public JdbcStoragePlugin(JdbcStorageConfig config, DrillbitContext context, String name) {
-    this.context = context;
+    super(context, name);
     this.config = config;
-    this.name = name;
     BasicDataSource source = new BasicDataSource();
     source.setDriverClassName(config.getDriver());
     source.setUrl(config.getUrl());
@@ -162,8 +159,6 @@ public class JdbcStoragePlugin extends AbstractStoragePlugin {
   /**
    * Returns whether a condition is supported by {@link JdbcJoin}.
    *
-   * <p>Corresponds to the capabilities of
-   * {@link JdbcJoin#convertConditionToSqlNode}.
    *
    * @param node Condition
    * @return Whether condition is supported
@@ -429,8 +424,8 @@ public class JdbcStoragePlugin extends AbstractStoragePlugin {
 
   @Override
   public void registerSchemas(SchemaConfig config, SchemaPlus parent) {
-    JdbcCatalogSchema schema = new JdbcCatalogSchema(name);
-    SchemaPlus holder = parent.add(name, schema);
+    JdbcCatalogSchema schema = new JdbcCatalogSchema(getName());
+    SchemaPlus holder = parent.add(getName(), schema);
     schema.setHolder(holder);
   }
 
@@ -438,14 +433,6 @@ public class JdbcStoragePlugin extends AbstractStoragePlugin {
   @Override
   public JdbcStorageConfig getConfig() {
     return config;
-  }
-
-  public DrillbitContext getContext() {
-    return this.context;
-  }
-
-  public String getName() {
-    return this.name;
   }
 
   @Override
