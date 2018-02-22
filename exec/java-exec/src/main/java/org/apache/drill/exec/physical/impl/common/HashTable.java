@@ -67,13 +67,17 @@ public interface HashTable {
 
   void clear();
 
-  public void updateIncoming(VectorContainer newIncoming, RecordBatch newIncomingProbe);
+  void updateIncoming(VectorContainer newIncoming, RecordBatch newIncomingProbe);
 
   void reset();
 
   void setMaxVarcharSize(int size);
 
   boolean outputKeys(int batchIdx, VectorContainer outContainer, int outStartIndex, int numRecords, int numExpectedRecords);
+
+  String makeDebugString();
+
+  long getActualSize();
 }
 
 
