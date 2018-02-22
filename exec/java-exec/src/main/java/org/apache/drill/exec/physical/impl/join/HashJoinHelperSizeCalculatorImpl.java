@@ -18,9 +18,9 @@
 package org.apache.drill.exec.physical.impl.join;
 
 import com.google.common.base.Preconditions;
-import org.apache.drill.common.types.TypeProtos;
-import org.apache.drill.exec.expr.TypeHelper;
 import org.apache.drill.exec.record.RecordBatch;
+import org.apache.drill.exec.record.RecordBatchSizer;
+import org.apache.drill.exec.vector.IntVector;
 
 public class HashJoinHelperSizeCalculatorImpl implements HashJoinHelperSizeCalculator {
   public static final HashJoinHelperSizeCalculatorImpl INSTANCE = new HashJoinHelperSizeCalculatorImpl();
@@ -30,24 +30,22 @@ public class HashJoinHelperSizeCalculatorImpl implements HashJoinHelperSizeCalcu
   }
 
   @Override
-  public long calculateSize(HashJoinMemoryCalculator.PartitionStat partitionStat) {
+  public long calculateSize(HashJoinMemoryCalculator.PartitionStat partitionStat, double fragmentationFactor) {
     Preconditions.checkArgument(!partitionStat.isSpilled());
 
-    final long intSize =
-      ((long) TypeHelper.getSize(TypeProtos.MajorType.newBuilder().setMinorType(TypeProtos.MinorType.INT).build()));
     // Account for the size of the SV4 in a hash join helper
-    long joinHelperSize = intSize * RecordBatch.MAX_BATCH_SIZE;
+    long joinHelperSize = IntVector.VALUE_WIDTH * RecordBatch.MAX_BATCH_SIZE;
 
     // Account for the SV4 for each batch that holds links for each batch
     for (HashJoinMemoryCalculator.BatchStat batchStat: partitionStat.getInMemoryBatches()) {
       // Note we don't have to round up to nearest power of 2, since we allocate the exact
       // space needed for the value vector.
-      joinHelperSize += batchStat.getNumRecords() * intSize;
+      joinHelperSize += batchStat.getNumRecords() * IntVector.VALUE_WIDTH;
     }
 
     // Note the BitSets of the HashJoin helper are stored on heap, so we don't account for them here.
     // TODO move BitSets to direct memory
 
-    return joinHelperSize;
+    return RecordBatchSizer.multiplyByFactor(joinHelperSize, fragmentationFactor);
   }
 }

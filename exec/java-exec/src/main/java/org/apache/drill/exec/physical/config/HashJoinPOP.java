@@ -88,6 +88,7 @@ public class HashJoinPOP extends AbstractBase {
     public PhysicalOperator getNewWithChildren(List<PhysicalOperator> children) {
         Preconditions.checkArgument(children.size() == 2);
         HashJoinPOP hj = new HashJoinPOP(children.get(0), children.get(1), conditions, joinType, isRowKeyJoin, joinControl);
+        hj.setMaxAllocation(getMaxAllocation());
         hj.setSubScanForRowKeyJoin(this.getSubScanForRowKeyJoin());
         return hj;
     }
@@ -147,6 +148,11 @@ public class HashJoinPOP extends AbstractBase {
     @Override
     public int getOperatorType() {
         return CoreOperatorType.HASH_JOIN_VALUE;
+    }
+
+    @Override
+    public void setMaxAllocation(long maxAllocation) {
+        this.maxAllocation = maxAllocation;
     }
 
     @Override

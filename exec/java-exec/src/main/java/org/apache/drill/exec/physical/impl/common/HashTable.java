@@ -68,7 +68,7 @@ public interface HashTable {
 
   void clear();
 
-  public void updateIncoming(VectorContainer newIncoming, RecordBatch newIncomingProbe);
+  void updateIncoming(VectorContainer newIncoming, RecordBatch newIncomingProbe);
 
   void reset();
 
@@ -77,6 +77,9 @@ public interface HashTable {
   boolean outputKeys(int batchIdx, VectorContainer outContainer, int outStartIndex, int numRecords, int numExpectedRecords);
 
   Pair<VectorContainer, Integer> nextBatch();
+  String makeDebugString();
+
+  long getActualSize();
 }
 
 

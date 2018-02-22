@@ -24,18 +24,23 @@ import org.junit.Test;
 
 public class TestBuildSidePartitioningImpl {
   @Test
-  public void testSimpleReserveMemoryCalculation() {
+  public void testSimpleReserveMemoryCalculationNoHash() {
+    final int maxBatchNumRecords = 20;
     final HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl calc =
       new HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl(
         new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE),
         HashJoinHelperSizeCalculatorImpl.INSTANCE,
-        20,
         2.0,
         1.5);
 
+    final CaseInsensitiveMap<Long> buildValueSizes = CaseInsensitiveMap.newHashMap();
+    final CaseInsensitiveMap<Long> probeValueSizes = CaseInsensitiveMap.newHashMap();
     final CaseInsensitiveMap<Long> keySizes = CaseInsensitiveMap.newHashMap();
 
     calc.initialize(true,
+      false,
+      buildValueSizes,
+      probeValueSizes,
       keySizes,
       200,
       2,
@@ -45,12 +50,64 @@ public class TestBuildSidePartitioningImpl {
       10,
       10,
       5,
+      maxBatchNumRecords,
+      maxBatchNumRecords,
+      10,
       .75);
+
+    final HashJoinMemoryCalculator.PartitionStatSet partitionStatSet =
+      new HashJoinMemoryCalculator.PartitionStatSet(new PartitionStatImpl(), new PartitionStatImpl());
+    calc.setPartitionStatSet(partitionStatSet);
 
     long expectedReservedMemory = 60 // Max incoming batch size
       + 2 * 30 // build side batch for each spilled partition
       + 60; // Max incoming probe batch size
-    long actualReservedMemory = calc.getReservedMemory();
+    long actualReservedMemory = calc.getBuildReservedMemory();
+
+    Assert.assertEquals(expectedReservedMemory, actualReservedMemory);
+    Assert.assertEquals(2, calc.getNumPartitions());
+  }
+
+  @Test
+  public void testSimpleReserveMemoryCalculationHash() {
+    final int maxBatchNumRecords = 20;
+    final HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl calc =
+      new HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl(
+        new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE),
+        HashJoinHelperSizeCalculatorImpl.INSTANCE,
+        2.0,
+        1.5);
+
+    final CaseInsensitiveMap<Long> buildValueSizes = CaseInsensitiveMap.newHashMap();
+    final CaseInsensitiveMap<Long> probeValueSizes = CaseInsensitiveMap.newHashMap();
+    final CaseInsensitiveMap<Long> keySizes = CaseInsensitiveMap.newHashMap();
+
+    calc.initialize(false,
+      true,
+      buildValueSizes,
+      probeValueSizes,
+      keySizes,
+      350,
+      2,
+      20,
+      10,
+      20,
+      10,
+      10,
+      5,
+      maxBatchNumRecords,
+      maxBatchNumRecords,
+      10,
+      .75);
+
+    final HashJoinMemoryCalculator.PartitionStatSet partitionStatSet =
+      new HashJoinMemoryCalculator.PartitionStatSet(new PartitionStatImpl(), new PartitionStatImpl());
+    calc.setPartitionStatSet(partitionStatSet);
+
+    long expectedReservedMemory = 60 // Max incoming batch size
+      + 2 * (/* data size for batch */ 30 + /* Space reserved for hash value vector */ 10 * 4 * 2) // build side batch for each spilled partition
+      + 60; // Max incoming probe batch size
+    long actualReservedMemory = calc.getBuildReservedMemory();
 
     Assert.assertEquals(expectedReservedMemory, actualReservedMemory);
     Assert.assertEquals(2, calc.getNumPartitions());
@@ -58,19 +115,23 @@ public class TestBuildSidePartitioningImpl {
 
   @Test
   public void testAdjustInitialPartitions() {
-
+    final int maxBatchNumRecords = 20;
     final HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl calc =
       new HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl(
         new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE),
         HashJoinHelperSizeCalculatorImpl.INSTANCE,
-        20,
         2.0,
         1.5);
 
+    final CaseInsensitiveMap<Long> buildValueSizes = CaseInsensitiveMap.newHashMap();
+    final CaseInsensitiveMap<Long> probeValueSizes = CaseInsensitiveMap.newHashMap();
     final CaseInsensitiveMap<Long> keySizes = CaseInsensitiveMap.newHashMap();
 
     calc.initialize(
       true,
+      false,
+      buildValueSizes,
+      probeValueSizes,
       keySizes,
       200,
       4,
@@ -80,12 +141,20 @@ public class TestBuildSidePartitioningImpl {
       10,
       10,
       5,
+      maxBatchNumRecords,
+      maxBatchNumRecords,
+      10,
       .75);
+
+    final HashJoinMemoryCalculator.PartitionStatSet partitionStatSet =
+      new HashJoinMemoryCalculator.PartitionStatSet(new PartitionStatImpl(), new PartitionStatImpl(),
+        new PartitionStatImpl(), new PartitionStatImpl());
+    calc.setPartitionStatSet(partitionStatSet);
 
     long expectedReservedMemory = 60 // Max incoming batch size
       + 2 * 30 // build side batch for each spilled partition
       + 60; // Max incoming probe batch size
-    long actualReservedMemory = calc.getReservedMemory();
+    long actualReservedMemory = calc.getBuildReservedMemory();
 
     Assert.assertEquals(expectedReservedMemory, actualReservedMemory);
     Assert.assertEquals(2, calc.getNumPartitions());
@@ -93,19 +162,24 @@ public class TestBuildSidePartitioningImpl {
 
   @Test
   public void testNoRoomInMemoryForBatch1() {
+    final int maxBatchNumRecords = 20;
 
     final HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl calc =
       new HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl(
         new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE),
         HashJoinHelperSizeCalculatorImpl.INSTANCE,
-        20,
         2.0,
         1.5);
 
+    final CaseInsensitiveMap<Long> buildValueSizes = CaseInsensitiveMap.newHashMap();
+    final CaseInsensitiveMap<Long> probeValueSizes = CaseInsensitiveMap.newHashMap();
     final CaseInsensitiveMap<Long> keySizes = CaseInsensitiveMap.newHashMap();
 
     calc.initialize(
       true,
+      false,
+      buildValueSizes,
+      probeValueSizes,
       keySizes,
       180,
       2,
@@ -115,36 +189,48 @@ public class TestBuildSidePartitioningImpl {
       10,
       10,
       5,
+      maxBatchNumRecords,
+      maxBatchNumRecords,
+      10,
       .75);
+
+    final PartitionStatImpl partition1 = new PartitionStatImpl();
+    final PartitionStatImpl partition2 = new PartitionStatImpl();
+    final HashJoinMemoryCalculator.PartitionStatSet partitionStatSet =
+      new HashJoinMemoryCalculator.PartitionStatSet(partition1, partition2);
+    calc.setPartitionStatSet(partitionStatSet);
 
     long expectedReservedMemory = 60 // Max incoming batch size
       + 2 * 30 // build side batch for each spilled partition
       + 60; // Max incoming probe batch size
-    long actualReservedMemory = calc.getReservedMemory();
+    long actualReservedMemory = calc.getBuildReservedMemory();
 
     Assert.assertEquals(expectedReservedMemory, actualReservedMemory);
     Assert.assertEquals(2, calc.getNumPartitions());
-    Assert.assertFalse(calc.isSpilled(0));
-    Assert.assertFalse(calc.isSpilled(1));
 
-    boolean spill = calc.addBatchToPartition(0, 10, 15);
-    Assert.assertTrue(spill);
+    partition1.add(new HashJoinMemoryCalculator.BatchStat(10, 8));
+    Assert.assertTrue(calc.shouldSpill());
   }
 
   @Test
   public void testCompleteLifeCycle() {
+    final int maxBatchNumRecords = 20;
     final HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl calc =
       new HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl(
         new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE),
         HashJoinHelperSizeCalculatorImpl.INSTANCE,
-        20,
         2.0,
         1.5);
 
+    final CaseInsensitiveMap<Long> buildValueSizes = CaseInsensitiveMap.newHashMap();
+    final CaseInsensitiveMap<Long> probeValueSizes = CaseInsensitiveMap.newHashMap();
     final CaseInsensitiveMap<Long> keySizes = CaseInsensitiveMap.newHashMap();
 
     calc.initialize(
       true,
+      false,
+      buildValueSizes,
+      probeValueSizes,
       keySizes,
       210,
       2,
@@ -154,58 +240,48 @@ public class TestBuildSidePartitioningImpl {
       10,
       10,
       5,
+      maxBatchNumRecords,
+      maxBatchNumRecords,
+      10,
       .75);
 
-    Assert.assertFalse(calc.isSpilled(0));
-    Assert.assertFalse(calc.isSpilled(1));
+    final PartitionStatImpl partition1 = new PartitionStatImpl();
+    final PartitionStatImpl partition2 = new PartitionStatImpl();
+    final HashJoinMemoryCalculator.PartitionStatSet partitionStatSet =
+      new HashJoinMemoryCalculator.PartitionStatSet(partition1, partition2);
+    calc.setPartitionStatSet(partitionStatSet);
 
-    // Add to partition 0, no spill needed
-    {
-      boolean spill = calc.addBatchToPartition(0, 10, 15);
-      Assert.assertFalse(spill);
-
-      Assert.assertFalse(calc.isSpilled(0));
-      Assert.assertFalse(calc.isSpilled(1));
-    }
 
     // Add to partition 1, no spill needed
     {
-      boolean spill = calc.addBatchToPartition(1, 10, 15);
-      Assert.assertFalse(spill);
-
-      Assert.assertFalse(calc.isSpilled(0));
-      Assert.assertFalse(calc.isSpilled(1));
+      partition1.add(new HashJoinMemoryCalculator.BatchStat(10, 7));
+      Assert.assertFalse(calc.shouldSpill());
     }
 
-    // Add to partition 0, and partition 0 spilled
+    // Add to partition 2, no spill needed
     {
-      boolean spill = calc.addBatchToPartition(0, 10, 15);
-      Assert.assertTrue(spill);
-
-      calc.spill(0);
-
-      Assert.assertTrue(calc.isSpilled(0));
-      Assert.assertFalse(calc.isSpilled(1));
-    }
-
-    // Add to partition 1, no spill needed
-    {
-      boolean spill = calc.addBatchToPartition(1, 10, 15);
-      Assert.assertFalse(spill);
-
-      Assert.assertTrue(calc.isSpilled(0));
-      Assert.assertFalse(calc.isSpilled(1));
+      partition2.add(new HashJoinMemoryCalculator.BatchStat(10, 8));
+      Assert.assertFalse(calc.shouldSpill());
     }
 
     // Add to partition 1, and partition 1 spilled
     {
-      boolean spill = calc.addBatchToPartition(1, 10, 15);
-      Assert.assertTrue(spill);
+      partition1.add(new HashJoinMemoryCalculator.BatchStat(10, 8));
+      Assert.assertTrue(calc.shouldSpill());
+      partition1.spill();
+    }
 
-      calc.spill(1);
+    // Add to partition 2, no spill needed
+    {
+      partition2.add(new HashJoinMemoryCalculator.BatchStat(10, 7));
+      Assert.assertFalse(calc.shouldSpill());
+    }
 
-      Assert.assertTrue(calc.isSpilled(0));
-      Assert.assertTrue(calc.isSpilled(1));
+    // Add to partition 2, and partition 2 spilled
+    {
+      partition2.add(new HashJoinMemoryCalculator.BatchStat(10, 8));
+      Assert.assertTrue(calc.shouldSpill());
+      partition2.spill();
     }
 
     Assert.assertNotNull(calc.next());
