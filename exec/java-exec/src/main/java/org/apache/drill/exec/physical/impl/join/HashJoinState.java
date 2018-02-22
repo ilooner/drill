@@ -22,21 +22,21 @@ public enum HashJoinState {
   /**
    * In this state, the build side of the join operation is partitioned. Each partition is
    * kept in memory. If we are able to fit all the partitions in memory and we have completely
-   * consumed the build side then we move to the {@link HashJoinState#PROBING_AND_PARTITIONING}. If we
+   * consumed the build side then we move to the {@link HashJoinState#POST_BUILD_CALCULATIONS}. If we
    * run out of memory and we still have not consumed all of the build side, we start evicting
    * partitions from memory to free memory. Then resume processing the build side. We repeat
    * this process until the entire build side is consumed. After the build side is consumed we
-   * proceed to the {@link HashJoinState#PROBING_AND_PARTITIONING} state.
+   * proceed to the {@link HashJoinState#POST_BUILD_CALCULATIONS} state.
    */
   BUILD_SIDE_PARTITIONING,
   /**
    * In this state, the probe side is consumed. If data in the probe side matches a build side partition
    * kept in memory, it is joined and sent out. If data in the probe side does not match a build side
    * partition, then it is spilled to disk. After all the probe side data is consumed processing moves
-   * on to the {@link HashJoinState#PROBING_AND_PARTITIONING} state if build side partitions are small enough
+   * on to the {@link HashJoinState#POST_BUILD_CALCULATIONS} state if build side partitions are small enough
    * to fit into memory. If build side partitions can't fit into memory processing moves to the
-   * {@link HashJoinState#PROBING_AND_PARTITIONING}
+   * {@link HashJoinState#POST_BUILD_CALCULATIONS}
    * state.
    */
-  PROBING_AND_PARTITIONING
+  POST_BUILD_CALCULATIONS
 }

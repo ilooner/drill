@@ -22,5 +22,7 @@ import java.util.Map;
 public interface HashTableSizeCalculator {
   long calculateSize(HashJoinMemoryCalculator.PartitionStat partitionStat,
                      Map<String, Long> keySizes,
-                     double loadFactor);
+                     double loadFactor,
+                     double safetyFactor,
+                     double fragmentationFactor);
 }
