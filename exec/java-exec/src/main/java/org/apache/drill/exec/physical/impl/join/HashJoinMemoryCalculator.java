@@ -19,11 +19,11 @@ package org.apache.drill.exec.physical.impl.join;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import org.apache.commons.io.FileUtils;
 import org.apache.drill.exec.record.RecordBatch;
-import org.apache.drill.exec.record.VectorContainer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
@@ -81,12 +81,15 @@ import java.util.Set;
  * </p>
 */
 public interface HashJoinMemoryCalculator extends HashJoinStateCalculator<HashJoinMemoryCalculator.BuildSidePartitioning> {
+  void initialize(boolean doMemoryCalc);
+
   /**
    * The interface representing the {@link HashJoinStateCalculator} corresponding to the
    * {@link HashJoinState#BUILD_SIDE_PARTITIONING} state.
    */
-  interface BuildSidePartitioning extends HashJoinStateCalculator<ProbingAndPartitioning> {
+  interface BuildSidePartitioning extends HashJoinStateCalculator<PostBuildCalculations> {
     void initialize(boolean autoTune,
+                    boolean reserveHash,
                     RecordBatch buildSideBatch,
                     RecordBatch probeSideBatch,
                     Set<String> joinColumns,
@@ -94,112 +97,87 @@ public interface HashJoinMemoryCalculator extends HashJoinStateCalculator<HashJo
                     int initialPartitions,
                     int recordsPerPartitionBatchBuild,
                     int recordsPerPartitionBatchProbe,
+                    int maxBatchNumRecordsBuild,
+                    int maxBatchNumRecordsProbe,
+                    int outputBatchNumRecords,
                     double loadFactor);
+
+    void setPartitionStatSet(PartitionStatSet partitionStatSet);
 
     int getNumPartitions();
 
-    long getReservedMemory();
+    long getBuildReservedMemory();
 
-    boolean isSpilled(int partitionIndex);
+    long getMaxReservedMemory();
 
-    boolean addBatchToPartition(final int partitionIndex, final VectorContainer container);
+    boolean shouldSpill();
 
-    void spill(int partitionIndex);
+    String makeDebugString();
   }
 
   /**
    * The interface representing the {@link HashJoinStateCalculator} corresponding to the
-   * {@link HashJoinState#PROBING_AND_PARTITIONING} state.
+   * {@link HashJoinState#POST_BUILD_CALCULATIONS} state.
    */
-  interface ProbingAndPartitioning extends HashJoinStateCalculator<HashJoinMemoryCalculator> {
+  interface PostBuildCalculations extends HashJoinStateCalculator<HashJoinMemoryCalculator> {
     void initialize();
-
-    long getConsumedMemory();
 
     boolean shouldSpill();
 
-    void spill(int partitionIndex);
+    String makeDebugString();
   }
 
-  /**
-   * This class represents the memory size statistics for an entire partition.
-   */
-  class PartitionStat {
-    private boolean spilled;
-    private long numRecords;
-    private long partitionSize;
-    private LinkedList<BatchStat> batchStats = Lists.newLinkedList();
+  interface PartitionStat {
+    List<BatchStat> getInMemoryBatches();
 
-    public PartitionStat() {
-    }
+    int getNumInMemoryBatches();
 
-    public void add(BatchStat batchStat) {
-      Preconditions.checkState(!spilled);
-      Preconditions.checkNotNull(batchStat);
-      partitionSize += batchStat.getBatchSize();
-      numRecords += batchStat.getNumRecords();
-      batchStats.addLast(batchStat);
-    }
+    boolean isSpilled();
 
-    public void spill() {
-      Preconditions.checkState(!spilled);
-      spilled = true;
-      partitionSize = 0;
-      numRecords = 0;
-      batchStats.clear();
-    }
+    long getNumInMemoryRecords();
 
-    public List<BatchStat> getInMemoryBatches()
-    {
-      return Collections.unmodifiableList(batchStats);
-    }
-
-    public int getNumInMemoryBatches()
-    {
-      return batchStats.size();
-    }
-
-    public boolean isSpilled()
-    {
-      return spilled;
-    }
-
-    public long getNumInMemoryRecords()
-    {
-      return numRecords;
-    }
-
-    public long getInMemorySize()
-    {
-      return partitionSize;
-    }
+    long getInMemorySize();
   }
 
   /**
    * This class represents the memory size statistics for an entire set of partitions.
    */
   class PartitionStatSet {
-    private List<PartitionStat> partitionStats = Lists.newArrayList();
+    private static final Logger log = LoggerFactory.getLogger(PartitionStatSet.class);
+    private final PartitionStat[] partitionStats;
 
-    public PartitionStatSet(int numPartitions) {
-      for (int partitionIndex = 0; partitionIndex < numPartitions; partitionIndex++) {
-        partitionStats.add(new PartitionStat());
+    public PartitionStatSet(final PartitionStat... partitionStats) {
+      this.partitionStats = Preconditions.checkNotNull(partitionStats);
+
+      for (PartitionStat partitionStat: partitionStats) {
+        Preconditions.checkNotNull(partitionStat);
       }
     }
 
     public PartitionStat get(int partitionIndex) {
-      return partitionStats.get(partitionIndex);
+      return partitionStats[partitionIndex];
     }
 
     public int getSize() {
-      return partitionStats.size();
+      return partitionStats.length;
+    }
+
+    // Somewhat inefficient but not a big deal since we don't deal with that many partitions
+    public long getNumInMemoryRecords() {
+      long numRecords = 0L;
+
+      for (final PartitionStat partitionStat: partitionStats) {
+        numRecords += partitionStat.getNumInMemoryRecords();
+      }
+
+      return numRecords;
     }
 
     // Somewhat inefficient but not a big deal since we don't deal with that many partitions
     public long getConsumedMemory() {
       long consumedMemory = 0L;
 
-      for (PartitionStat partitionStat: partitionStats) {
+      for (final PartitionStat partitionStat: partitionStats) {
         consumedMemory += partitionStat.getInMemorySize();
       }
 
@@ -217,8 +195,8 @@ public interface HashJoinMemoryCalculator extends HashJoinStateCalculator<HashJo
     public List<Integer> getPartitions(boolean spilled) {
       List<Integer> partitionIndices = Lists.newArrayList();
 
-      for (int partitionIndex = 0; partitionIndex < partitionStats.size(); partitionIndex++) {
-        final PartitionStat partitionStat = partitionStats.get(partitionIndex);
+      for (int partitionIndex = 0; partitionIndex < partitionStats.length; partitionIndex++) {
+        final PartitionStat partitionStat = partitionStats[partitionIndex];
 
         if (partitionStat.isSpilled() == spilled) {
           partitionIndices.add(partitionIndex);
@@ -242,6 +220,45 @@ public interface HashJoinMemoryCalculator extends HashJoinStateCalculator<HashJo
 
     public boolean noneSpilled() {
       return getSize() == getNumInMemoryPartitions();
+    }
+
+    public String makeDebugString() {
+      final StringBuilder sizeSb = new StringBuilder("Partition Sizes:\n");
+      final StringBuilder batchCountSb = new StringBuilder("Partition Batch Counts:\n");
+      final StringBuilder recordCountSb = new StringBuilder("Partition Record Counts:\n");
+
+      for (int partitionIndex = 0; partitionIndex < partitionStats.length; partitionIndex++) {
+        final PartitionStat partitionStat = partitionStats[partitionIndex];
+        final String partitionPrefix = partitionIndex + ": ";
+
+        sizeSb.append(partitionPrefix);
+        batchCountSb.append(partitionPrefix);
+        recordCountSb.append(partitionPrefix);
+
+        if (partitionStat.isSpilled()) {
+          sizeSb.append("Spilled");
+          batchCountSb.append("Spilled");
+          recordCountSb.append("Spilled");
+        } else if (partitionStat.getNumInMemoryRecords() == 0) {
+          sizeSb.append("Empty");
+          batchCountSb.append("Empty");
+          recordCountSb.append("Empty");
+        } else {
+          sizeSb.append(prettyPrintBytes(partitionStat.getInMemorySize()));
+          batchCountSb.append(partitionStat.getNumInMemoryBatches());
+          recordCountSb.append(partitionStat.getNumInMemoryRecords());
+        }
+
+        sizeSb.append("\n");
+        batchCountSb.append("\n");
+        recordCountSb.append("\n");
+      }
+
+      return sizeSb.toString() + "\n" + batchCountSb.toString() + "\n" + recordCountSb.toString();
+    }
+
+    public static String prettyPrintBytes(long byteCount) {
+      return String.format("%d (%s)", byteCount, FileUtils.byteCountToDisplaySize(byteCount));
     }
   }
 

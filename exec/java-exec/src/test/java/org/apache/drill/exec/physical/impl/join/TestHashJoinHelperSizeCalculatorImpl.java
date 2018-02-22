@@ -34,11 +34,11 @@ public class TestHashJoinHelperSizeCalculatorImpl {
     // Account for sv4 vector for batches
     expected += intSize * 3500;
 
-    HashJoinMemoryCalculator.PartitionStat partitionStat = new HashJoinMemoryCalculator.PartitionStat();
+    PartitionStatImpl partitionStat = new PartitionStatImpl();
     partitionStat.add(new HashJoinMemoryCalculator.BatchStat(1000, 2000));
     partitionStat.add(new HashJoinMemoryCalculator.BatchStat(2500, 5000));
 
-    long actual = HashJoinHelperSizeCalculatorImpl.INSTANCE.calculateSize(partitionStat);
+    long actual = HashJoinHelperSizeCalculatorImpl.INSTANCE.calculateSize(partitionStat, 1.0);
     Assert.assertEquals(expected, actual);
   }
 }
