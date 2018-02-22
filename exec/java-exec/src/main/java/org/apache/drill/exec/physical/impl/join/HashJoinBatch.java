@@ -21,12 +21,17 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import org.apache.drill.common.exceptions.RetryAfterSpillException;
 import org.apache.drill.common.exceptions.UserException;
 import org.apache.drill.common.expression.FieldReference;
+import org.apache.drill.common.expression.PathSegment;
+import org.apache.drill.common.expression.SchemaPath;
 import org.apache.drill.common.logical.data.JoinCondition;
 import org.apache.drill.common.logical.data.NamedExpression;
 import org.apache.drill.common.types.TypeProtos;
@@ -79,6 +84,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
   // Join conditions
   private final List<JoinCondition> conditions;
+  private final List<NamedExpression> rightExpr;
+  private final Set<String> buildJoinColumns;
 
   private final List<Comparator> comparators;
 
@@ -219,6 +226,21 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
        * hash join and setup the run time generated class for the probe side
        */
       if (state == BatchState.FIRST) {
+        // Prep for sniffing probe batch
+        currRightPartition = 0; // In case it's a Right/Full outer join
+        recordsProcessed = 0;
+        recordsToProcess = 0;
+
+        probeSchema = probeBatch.getSchema();
+        probeState = ProbeState.PROBE_PROJECT;
+
+        // A special case - if the left was an empty file
+        if ( leftUpstream == IterOutcome.NONE ){
+          changeToFinalProbeState();
+        } else {
+          this.recordsToProcess = probeBatch.getRecordCount();
+        }
+
         // Build the hash table, using the build side record batches.
         executeBuildPhase();
         // Update the hash table related stats for the operator
@@ -387,13 +409,10 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
   public void setupHashTable() throws IOException, SchemaChangeException, ClassTransformationException {
     // Setup the hash table configuration object
-    int conditionsSize = conditions.size();
-    final List<NamedExpression> rightExpr = new ArrayList<>(conditionsSize);
-    List<NamedExpression> leftExpr = new ArrayList<>(conditionsSize);
+    List<NamedExpression> leftExpr = new ArrayList<>(conditions.size());
 
     // Create named expressions from the conditions
-    for (int i = 0; i < conditionsSize; i++) {
-      rightExpr.add(new NamedExpression(conditions.get(i).getRight(), new FieldReference("build_side_" + i)));
+    for (int i = 0; i < conditions.size(); i++) {
       leftExpr.add(new NamedExpression(conditions.get(i).getLeft(), new FieldReference("probe_side_" + i)));
     }
 
@@ -443,7 +462,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     bitsInMask = Integer.bitCount(partitionMask); // e.g. 0x1F -> 5
 
     RECORDS_PER_BATCH = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_ROWS_IN_BATCH_VALIDATOR);
-
     MAX_BATCHES_IN_MEMORY = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_BATCHES_IN_MEMORY_VALIDATOR);
     MAX_BATCHES_PER_PARTITION = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_BATCHES_PER_PARTITION_VALIDATOR);
 
@@ -525,22 +543,17 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
    * @throws IOException
    */
   public void executeBuildPhase() throws SchemaChangeException, ClassTransformationException, IOException {
+    final HashJoinMemoryCalculator.BuildSidePartitioning buildCalc = new HashJoinMemoryCalculatorImpl().next();
+    boolean hasProbeData = true;
 
     if ( rightUpstream == IterOutcome.NONE ) { return; } // empty right
-
-    // skip first batch if count is zero, as it may be an empty schema batch
-    if (false && buildBatch.getRecordCount() == 0) {
-      for (final VectorWrapper<?> w : buildBatch) {
-        w.clear();
-      }
-      rightUpstream = next(buildBatch);
-    }
 
     //Setup the underlying hash table
     if ( cycleNum == 0 ) { delayedSetup(); } // first time only
 
     initializeBuild();
 
+    boolean firstDataBuild = false;
     boolean moreData = true;
     while (moreData) {
       switch (rightUpstream) {
@@ -576,6 +589,37 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       case OK:
         final int currentRecordCount = buildBatch.getRecordCount();
 
+        if (!firstDataBuild && currentRecordCount > 0 && canSpill) {
+          firstDataBuild = true;
+
+          if (leftUpstream == IterOutcome.NONE) {
+            // No probe data
+            hasProbeData = false;
+          } else {
+            if (recordsToProcess == 0) {
+              // Sniff the first non empty batch
+              executeProbePhase(true);
+            }
+
+            // If no non empty probe batch is found there is no probe data.
+            hasProbeData = recordsToProcess != 0;
+          }
+
+          if (hasProbeData) {
+            // We've sniffed first non empty build and probe batches
+            buildCalc.initialize(
+              false,
+              buildBatch,
+              hasProbeData ? probeBatch: null,
+              buildJoinColumns,
+              allocator.getLimit(),
+              numPartitions,
+              RECORDS_PER_BATCH,
+              RECORDS_PER_BATCH,
+              HashTable.DEFAULT_LOAD_FACTOR);
+          }
+        }
+
         if ( cycleNum > 0 ) {
           read_HV_vector = (IntVector) buildBatch.getContainer().getLast();
         }
@@ -587,13 +631,18 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           hashCode >>>= bitsInMask;
           int pos = currentBatches[currPart].appendRow(buildBatch.getContainer(),ind);
           currHVVectors[currPart].getMutator().set(pos, hashCode);   // store the hash value in the new column
+
           if ( pos + 1 == RECORDS_PER_BATCH ) {
-            // The current decision on when-to-spill is crude
-            completeAnInnerBatch(currPart,true,
-              isSpilled(currPart) ||  // once spilled - then spill every new full batch
-                canSpill &&
-                  ( inMemBatches > MAX_BATCHES_IN_MEMORY ||
-                    tmpBatchesList[currPart].size() > MAX_BATCHES_PER_PARTITION ));
+            if (canSpill && hasProbeData) {
+              boolean isSpilled = isSpilled(currPart);
+              boolean spill = isSpilled || buildCalc.addBatchToPartition(currPart, currentBatches[currPart]);
+              completeAnInnerBatch(currPart, true, spill);
+              if (spill && !isSpilled) {
+                buildCalc.spill(currPart);
+              }
+            } else {
+              completeAnInnerBatch(currPart, true, false);
+            }
           }
         }
 
@@ -639,10 +688,26 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       }
     }
 
+    HashJoinMemoryCalculator.ProbingAndPartitioning probeCalc = null;
+
+    if (canSpill && hasProbeData && firstDataBuild) {
+      probeCalc = buildCalc.next();
+      probeCalc.initialize();
+    }
+
     //
     //  Traverse all the in-memory partitions' incoming batches, and build their hash tables
     //
     for (int currPart = 0; currPart < numPartitions; currPart++) {
+      if (isSpilled(currPart)) {
+        continue;
+      }
+
+      if (canSpill && hasProbeData && firstDataBuild && probeCalc.shouldSpill()) {
+        spillAPartition(tmpBatchesList[currPart], currPart, "inner");
+        probeCalc.spill(currPart);
+        continue;
+      }
 
       // each partition is a regular array of batches
       ArrayList<VectorContainer> thisPart = new ArrayList<>();
@@ -756,6 +821,17 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     joinType = popConfig.getJoinType();
     conditions = popConfig.getConditions();
     this.popConfig = popConfig;
+
+    rightExpr = new ArrayList<>(conditions.size());
+    buildJoinColumns = Sets.newHashSet();
+
+    for (int i = 0; i < conditions.size(); i++) {
+      final SchemaPath rightPath = (SchemaPath) conditions.get(i).getRight();
+      final PathSegment.NameSegment nameSegment = (PathSegment.NameSegment)rightPath.getLastSegment();
+      buildJoinColumns.add(nameSegment.getPath());
+      final String refName = "build_side_" + i;
+      rightExpr.add(new NamedExpression(conditions.get(i).getRight(), new FieldReference(refName)));
+    }
 
     comparators = Lists.newArrayListWithExpectedSize(conditions.size());
     // When DRILL supports Java 8, use the following instead of the for() loop
@@ -995,19 +1071,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
    * Must be called AFTER the build completes
    */
   private void setupProbe() {
-    currRightPartition = 0; // In case it's a Right/Full outer join
-    recordsProcessed = 0;
-    recordsToProcess = 0;
-
-    probeSchema = probeBatch.getSchema();
-    probeState = ProbeState.PROBE_PROJECT;
-
-    // A special case - if the left was an empty file
-    if ( leftUpstream == IterOutcome.NONE ){
-      changeToFinalProbeState();
-    } else {
-      this.recordsToProcess = probeBatch.getRecordCount();
-    }
     // in case need to spill some outer partitions
     // initialize those partitions' batches and hash-value vectors
     for (int i = 0; i < numPartitions; i++) {
@@ -1033,8 +1096,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     }
   }
 
-  private void executeProbePhase() throws SchemaChangeException {
-
+  private boolean executeProbePhase(boolean sniff) throws SchemaChangeException {
     while (outputRecords < TARGET_RECORDS_PER_BATCH && probeState != ProbeState.DONE && probeState != ProbeState.PROJECT_RIGHT) {
 
       // Check if we have processed all records in this batch we need to invoke next
@@ -1085,6 +1147,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
             // If we received an empty batch do nothing
             if (recordsToProcess == 0) {
               continue;
+            } else if (sniff) {
+              return true;
             }
             if ( cycleNum > 0 ) {
               read_HV_vector = (IntVector) probeBatch.getContainer().getLast(); // Needed ?
@@ -1181,6 +1245,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         }
       }
     }
+
+    return false;
   }
 
   public int probeAndProject() throws SchemaChangeException {
@@ -1193,7 +1259,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     }
 
     if (probeState == ProbeState.PROBE_PROJECT) {
-      executeProbePhase();
+      executeProbePhase(false);
     }
 
     if (probeState == ProbeState.PROJECT_RIGHT) {

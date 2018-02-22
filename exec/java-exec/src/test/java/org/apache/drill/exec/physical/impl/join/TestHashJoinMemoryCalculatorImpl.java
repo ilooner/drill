@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,25 +15,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.drill.exec.vector;
+package org.apache.drill.exec.physical.impl.join;
 
-public interface FixedWidthVector extends ValueVector {
+import org.junit.Assert;
+import org.junit.Test;
 
-  /**
-   * Allocate a new memory space for this vector.  Must be called prior to using the ValueVector.
-   *
-   * @param valueCount   Number of values in the vector.
-   */
-  void allocateNew(int valueCount);
-
-  /**
-   * Zero out the underlying buffer backing this vector.
-   */
-  void zeroVector();
-
-  /**
-   * The width of a record in bytes.
-   * @return The width of a record in bytes.
-   */
-  int getValueWidth();
+public class TestHashJoinMemoryCalculatorImpl {
+  @Test
+  public void computeMaxBatchSizeTest() {
+    long expected = 1200;
+    long actual = HashJoinMemoryCalculatorImpl.computeMaxBatchSize(
+      100,
+      25,
+      100,
+      2.0,
+      1.5);
+    Assert.assertEquals(expected, actual);
+  }
 }

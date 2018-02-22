@@ -17,16 +17,17 @@
  */
 package org.apache.drill.exec.record;
 
-import java.util.Set;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.drill.common.map.CaseInsensitiveMap;
 import org.apache.drill.common.types.TypeProtos.DataMode;
 import org.apache.drill.common.types.TypeProtos.MinorType;
-import org.apache.drill.exec.expr.TypeHelper;
 import org.apache.drill.exec.memory.AllocationManager.BufferLedger;
 import org.apache.drill.exec.memory.BaseAllocator;
+import org.apache.drill.exec.physical.impl.xsort.managed.SortMemoryManager;
 import org.apache.drill.exec.record.selection.SelectionVector2;
+import org.apache.drill.exec.vector.FixedWidthVector;
 import org.apache.drill.exec.vector.UInt4Vector;
 import org.apache.drill.exec.vector.ValueVector;
 import org.apache.drill.exec.vector.complex.AbstractMapVector;
@@ -44,6 +45,11 @@ import com.google.common.collect.Sets;
 
 public class RecordBatchSizer {
 
+  // TODO consolidate common memory estimation helpers
+  public static final double PAYLOAD_FROM_BUFFER = SortMemoryManager.PAYLOAD_FROM_BUFFER;
+  public static final double FRAGMENTATION_FACTOR = 1.0 / PAYLOAD_FROM_BUFFER;
+  public static final double BUFFER_FROM_PAYLOAD = SortMemoryManager.BUFFER_FROM_PAYLOAD;
+
   /**
    * Column size information.
    */
@@ -57,7 +63,7 @@ public class RecordBatchSizer {
      * columns.
      */
 
-    public int stdSize;
+    public int stdSize = -1;
 
     /**
      * Actual average column width as determined from actual memory use. This
@@ -108,7 +114,15 @@ public class RecordBatchSizer {
     public final float estElementCountPerArray;
     public final boolean isVariableWidth;
 
+    public ColumnSize(ValueVector v) {
+      this(v, "");
+    }
+
     public ColumnSize(ValueVector v, String prefix) {
+      if (v instanceof FixedWidthVector) {
+        stdSize = ((FixedWidthVector)v).getValueWidth();
+      }
+
       this.prefix = prefix;
       valueCount = v.getAccessor().getValueCount();
       metadata = v.getField();
@@ -133,17 +147,44 @@ public class RecordBatchSizer {
         // No standard size for Union type
         dataSize = v.getPayloadByteCount(valueCount);
         break;
+      case GENERIC_OBJECT:
+        // Object vectors do not consume direct memory so their known size and
+        // estSize are 0.
+        stdSize = 0;
+        break;
       default:
         dataSize = v.getPayloadByteCount(valueCount);
-        try {
-          stdSize = TypeHelper.getSize(metadata.getType()) * elementCount;
-        } catch (Exception e) {
-          // For unsupported types, just set stdSize to 0.
-          stdSize = 0;
-        }
       }
       estSize = safeDivide(dataSize, valueCount);
       netSize = v.getPayloadByteCount(valueCount);
+    }
+
+    /**
+     * If we can determine the knownSize, return that. Otherwise return the estSize.
+     * @return The knownSize or estSize.
+     */
+    public int getStdOrEstSize()
+    {
+      if (hasStdSize()) {
+        // We know the exact size of the column, return it.
+        return stdSize;
+      }
+
+      return estSize;
+    }
+
+    public boolean hasStdSize()
+    {
+      return stdSize != -1;
+    }
+
+    public int getStdSize()
+    {
+      if (!hasStdSize()) {
+        throw new IllegalStateException("Unknown size for column: " + metadata);
+      }
+
+      return stdSize;
     }
 
     @SuppressWarnings("resource")
@@ -251,8 +292,6 @@ public class RecordBatchSizer {
   public static ColumnSize getColumn(ValueVector v, String prefix) {
     return new ColumnSize(v, prefix);
   }
-
-  public static final int MAX_VECTOR_SIZE = ValueVector.MAX_BUFFER_SIZE; // 16 MiB
 
   private Map<String, ColumnSize> columnSizes = CaseInsensitiveMap.newHashMap();
 
@@ -388,8 +427,11 @@ public class RecordBatchSizer {
   private void measureColumn(ValueVector v, String prefix) {
 
     ColumnSize colSize = new ColumnSize(v, prefix);
-    columnSizes.put(v.getField().getName(), colSize);
-    stdRowWidth += colSize.stdSize;
+
+    if (colSize.hasStdSize()) {
+      stdRowWidth += colSize.stdSize;
+    }
+
     netBatchSize += colSize.dataSize;
     maxSize = Math.max(maxSize, colSize.dataSize);
     if (colSize.metadata.isNullable()) {
@@ -414,6 +456,7 @@ public class RecordBatchSizer {
         v.collectLedgers(ledgers);
     }
 
+    columnSizes.put(v.getField().getName(), colSize);
     netRowWidth += colSize.estSize;
     netRowWidthCap50 += ! colSize.isVariableWidth ? colSize.estSize :
         8 /* offset vector */ + roundUpToPowerOf2(Math.min(colSize.estSize,50));
@@ -466,6 +509,11 @@ public class RecordBatchSizer {
   public int avgDensity() { return avgDensity; }
   public long netSize() { return netBatchSize; }
   public int maxAvgColumnSize() { return maxSize / rowCount; }
+
+  public static long multiplyByFactors(long size)
+  {
+    return (long) (((double) size) * FRAGMENTATION_FACTOR * BUFFER_FROM_PAYLOAD);
+  }
 
   @Override
   public String toString() {
