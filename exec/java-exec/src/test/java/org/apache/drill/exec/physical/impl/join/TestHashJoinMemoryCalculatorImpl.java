@@ -17,19 +17,66 @@
  */
 package org.apache.drill.exec.physical.impl.join;
 
+import org.apache.drill.exec.vector.IntVector;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class TestHashJoinMemoryCalculatorImpl {
   @Test
-  public void computeMaxBatchSizeTest() {
-    long expected = 1200;
-    long actual = HashJoinMemoryCalculatorImpl.computeMaxBatchSize(
+  public void testComputeMaxBatchSizeNoHash() {
+    final long expected = 1200;
+    final long actual = HashJoinMemoryCalculatorImpl.computeMaxBatchSize(
+      100,
+      25,
+      100,
+      2.0,
+      1.5,
+      false);
+    final long actualNoHash = HashJoinMemoryCalculatorImpl.computeMaxBatchSizeNoHash(
       100,
       25,
       100,
       2.0,
       1.5);
+
     Assert.assertEquals(expected, actual);
+    Assert.assertEquals(expected, actualNoHash);
+  }
+
+  @Test
+  public void testComputeMaxBatchSizeHash()
+  {
+    long expected = HashJoinMemoryCalculatorImpl.computeMaxBatchSizeNoHash(
+      100,
+      25,
+      100,
+      2.0,
+      4.0) +
+      100 * IntVector.VALUE_WIDTH * 2;
+
+    final long actual = HashJoinMemoryCalculatorImpl.computeMaxBatchSize(
+      100,
+      25,
+      100,
+      2.0,
+      4.0,
+      true);
+
+    Assert.assertEquals(expected, actual);
+  }
+
+  @Test // Make sure no exception is thrown
+  public void testMakeDebugString()
+  {
+    final PartitionStatImpl partitionStat1 = new PartitionStatImpl();
+    final PartitionStatImpl partitionStat2 = new PartitionStatImpl();
+    final PartitionStatImpl partitionStat3 = new PartitionStatImpl();
+    final PartitionStatImpl partitionStat4 = new PartitionStatImpl();
+
+    final HashJoinMemoryCalculator.PartitionStatSet partitionStatSet =
+      new HashJoinMemoryCalculator.PartitionStatSet(partitionStat1, partitionStat2, partitionStat3, partitionStat4);
+    partitionStat1.add(new HashJoinMemoryCalculator.BatchStat(10, 7));
+    partitionStat2.add(new HashJoinMemoryCalculator.BatchStat(11, 20));
+    partitionStat3.spill();
   }
 }

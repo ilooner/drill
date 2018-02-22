@@ -515,6 +515,22 @@ public class RecordBatchSizer {
     return (long) (((double) size) * FRAGMENTATION_FACTOR * BUFFER_FROM_PAYLOAD);
   }
 
+  public static long multiplyByFactors(long size, double... factors)
+  {
+    double doubleSize = (double) size;
+
+    for (double factor: factors) {
+      doubleSize *= factor;
+    }
+
+    return (long) doubleSize;
+  }
+
+  public static long multiplyByFactor(long size, double factor)
+  {
+    return (long) (((double) size) * factor);
+  }
+
   @Override
   public String toString() {
     StringBuilder buf = new StringBuilder();

@@ -24,7 +24,7 @@ public class TestPartitionStat
 {
   @Test
   public void simpleAddBatchTest() {
-    final HashJoinMemoryCalculator.PartitionStat partitionStat = new HashJoinMemoryCalculator.PartitionStat();
+    final PartitionStatImpl partitionStat = new PartitionStatImpl();
 
     comparePartitionStat(partitionStat, true, 0L, 0, 0L);
     partitionStat.add(new HashJoinMemoryCalculator.BatchStat(1, 2));
@@ -35,7 +35,7 @@ public class TestPartitionStat
 
   @Test
   public void simpleSpillTest() {
-    final HashJoinMemoryCalculator.PartitionStat partitionStat = new HashJoinMemoryCalculator.PartitionStat();
+    final PartitionStatImpl partitionStat = new PartitionStatImpl();
 
     Assert.assertFalse(partitionStat.isSpilled());
     partitionStat.add(new HashJoinMemoryCalculator.BatchStat(1, 2));
