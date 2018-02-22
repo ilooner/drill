@@ -89,7 +89,8 @@ public class TestProbingAndPartitioningImpl {
         new MockHashJoinHelperSizeCalculator(10),
         fragmentationFactor,
         safetyFactor,
-        .75);
+        .75,
+        false);
 
     calc.initialize();
 
@@ -133,7 +134,8 @@ public class TestProbingAndPartitioningImpl {
         new MockHashJoinHelperSizeCalculator(hashJoinHelperSize),
         fragmentationFactor,
         safetyFactor,
-        .75);
+        .75,
+        false);
 
     calc.initialize();
 
@@ -185,7 +187,8 @@ public class TestProbingAndPartitioningImpl {
         new MockHashJoinHelperSizeCalculator(hashJoinHelperSize),
         fragmentationFactor,
         safetyFactor,
-        .75);
+        .75,
+        false);
 
     calc.initialize();
 
@@ -232,7 +235,8 @@ public class TestProbingAndPartitioningImpl {
         new MockHashJoinHelperSizeCalculator(hashJoinHelperSize),
         fragmentationFactor,
         safetyFactor,
-        .75);
+        .75,
+        false);
 
     calc.initialize();
     Assert.assertFalse(calc.shouldSpill());
@@ -270,7 +274,8 @@ public class TestProbingAndPartitioningImpl {
         new MockHashJoinHelperSizeCalculator(hashJoinHelperSize),
         fragmentationFactor,
         safetyFactor,
-        .75);
+        .75,
+        false);
 
     calc.initialize();
   }

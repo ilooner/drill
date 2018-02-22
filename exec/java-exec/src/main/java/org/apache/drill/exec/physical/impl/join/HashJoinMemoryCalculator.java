@@ -87,6 +87,7 @@ public interface HashJoinMemoryCalculator extends HashJoinStateCalculator<HashJo
    */
   interface BuildSidePartitioning extends HashJoinStateCalculator<ProbingAndPartitioning> {
     void initialize(boolean autoTune,
+                    boolean reserveHash,
                     RecordBatch buildSideBatch,
                     RecordBatch probeSideBatch,
                     Set<String> joinColumns,

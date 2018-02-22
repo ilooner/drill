@@ -36,6 +36,7 @@ public class TestBuildSidePartitioningImpl {
     final CaseInsensitiveMap<Long> keySizes = CaseInsensitiveMap.newHashMap();
 
     calc.initialize(true,
+      false,
       keySizes,
       200,
       2,
@@ -71,6 +72,7 @@ public class TestBuildSidePartitioningImpl {
 
     calc.initialize(
       true,
+      false,
       keySizes,
       200,
       4,
@@ -106,6 +108,7 @@ public class TestBuildSidePartitioningImpl {
 
     calc.initialize(
       true,
+      false,
       keySizes,
       180,
       2,
@@ -145,6 +148,7 @@ public class TestBuildSidePartitioningImpl {
 
     calc.initialize(
       true,
+      false,
       keySizes,
       210,
       2,

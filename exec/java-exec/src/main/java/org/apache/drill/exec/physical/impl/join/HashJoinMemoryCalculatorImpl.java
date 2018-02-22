@@ -26,6 +26,7 @@ import org.apache.drill.exec.physical.impl.xsort.managed.SortMemoryManager;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.RecordBatchSizer;
 import org.apache.drill.exec.record.VectorContainer;
+import org.apache.drill.exec.vector.IntVector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,8 +53,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     return INITIALIZING;
   }
 
-  // TODO use record batch sizer
-  public static long computeMaxBatchSize(final long incomingBatchSize,
+  public static long computeMaxBatchSizeNoHash(final long incomingBatchSize,
                                          final int incomingNumRecords,
                                          final int desiredNumRecords,
                                          final double fragmentationFactor,
@@ -61,10 +61,29 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     long maxBatchSize = HashJoinMemoryCalculatorImpl
       .computePartitionBatchSize(incomingBatchSize, incomingNumRecords, desiredNumRecords);
     // Multiple by fragmentation factor
-    maxBatchSize = (long) (((double) maxBatchSize) * fragmentationFactor);
-    // Multiple by safety factor to account for slightly large batches
-    maxBatchSize = (long) (((double) maxBatchSize) * safetyFactor);
-    return maxBatchSize;
+    return RecordBatchSizer.multiplyByFactors(maxBatchSize, fragmentationFactor, safetyFactor);
+  }
+
+  public static long computeMaxBatchSize(final long incomingBatchSize,
+                                         final int incomingNumRecords,
+                                         final int desiredNumRecords,
+                                         final double fragmentationFactor,
+                                         final double safetyFactor,
+                                         final boolean reserveHash) {
+    long size = computeMaxBatchSizeNoHash(incomingBatchSize,
+      incomingNumRecords,
+      desiredNumRecords,
+      fragmentationFactor,
+      safetyFactor);
+
+    if (!reserveHash) {
+      return size;
+    }
+
+    long hashSize = ProbingAndPartitioningImpl.computeValueVectorSize(desiredNumRecords, IntVector.VALUE_WIDTH);
+    hashSize = RecordBatchSizer.multiplyByFactors(hashSize, fragmentationFactor);
+
+    return size + hashSize;
   }
 
   public static long computePartitionBatchSize(final long incomingBatchSize,
@@ -90,7 +109,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
    * <h1>Life Cycle</h1>
    * <p>
    *   <ul>
-   *     <li><b></b>Step 0:</b> Call {@link #initialize(boolean, RecordBatch, RecordBatch, Set, long, int, int, int, double)}. This will initialize
+   *     <li><b></b>Step 0:</b> Call {@link #initialize(boolean, boolean, RecordBatch, RecordBatch, Set, long, int, int, int, double)}. This will initialize
    *     the StateCalculate with the additional information it needs.</li>
    *     <li><b>Step 1:</b> Call {@link #getNumPartitions()} to see the number of partitions that fit in memory.</li>
    *     <li><b>Step 2:</b> Call {@link #isSpilled(int)} to determine if the partition of interest is already spilled.</li>
@@ -126,6 +145,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     private int recordsPerPartitionBatchProbe;
     private Map<String, Long> keySizes;
     private boolean autoTune;
+    private boolean reserveHash;
     private double loadFactor;
 
     private PartitionStatSet partitionStatsSet;
@@ -148,6 +168,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
     @Override
     public void initialize(boolean autoTune,
+                           boolean reserveHash,
                            RecordBatch buildSideBatch,
                            RecordBatch probeSideBatch,
                            Set<String> joinColumns,
@@ -177,6 +198,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       }
 
       initialize(autoTune,
+        reserveHash,
         keySizes,
         memoryAvailable,
         initialPartitions,
@@ -202,6 +224,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
     @VisibleForTesting
     protected void initialize(boolean autoTune,
+                              boolean reserveHash,
                               CaseInsensitiveMap<Long> keySizes,
                               long memoryAvailable,
                               int initialPartitions,
@@ -218,19 +241,13 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
       this.loadFactor = loadFactor;
       this.autoTune = autoTune;
+      this.reserveHash = reserveHash;
       this.keySizes = Preconditions.checkNotNull(keySizes);
       this.memoryAvailable = memoryAvailable;
       this.buildBatchSize = buildBatchSize;
       this.probeBatchSize = probeBatchSize;
       this.buildNumRecords = buildNumRecords;
       this.probeNumRecords = probeNumRecords;
-
-      // Adjust based on number of records
-      this.maxBuildBatchSize = computeMaxBatchSize(buildBatchSize, buildNumRecords,
-        maxBatchNumRecords, fragmentationFactor, safetyFactor);
-      this.maxProbeBatchSize = computeMaxBatchSize(probeBatchSize, probeNumRecords,
-        maxBatchNumRecords, fragmentationFactor, safetyFactor);
-
       this.initialPartitions = initialPartitions;
       this.recordsPerPartitionBatchBuild = recordsPerPartitionBatchBuild;
       this.recordsPerPartitionBatchProbe = recordsPerPartitionBatchProbe;
@@ -257,13 +274,20 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
      */
     private void calculateMemoryUsage()
     {
+      // Adjust based on number of records
+      maxBuildBatchSize = computeMaxBatchSizeNoHash(buildBatchSize, buildNumRecords,
+        maxBatchNumRecords, fragmentationFactor, safetyFactor);
+      maxProbeBatchSize = computeMaxBatchSizeNoHash(probeBatchSize, probeNumRecords,
+        maxBatchNumRecords, fragmentationFactor, safetyFactor);
+
       // This calculates the amount of memory consumed by a partition batch
       // TODO multiply by fragmentation factor again to account for value vector doubling
       partitionBuildBatchSize = computeMaxBatchSize(buildBatchSize,
         buildNumRecords,
         recordsPerPartitionBatchBuild,
         fragmentationFactor,
-        safetyFactor);
+        safetyFactor,
+        reserveHash);
 
       for (partitions = initialPartitions; partitions >= 1; partitions /= 2) {
         // The total amount of memory to reserve for incomplete batches across all partitions
@@ -348,7 +372,8 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         hashJoinHelperSizeCalculator,
         fragmentationFactor,
         safetyFactor,
-        loadFactor);
+        loadFactor,
+        reserveHash);
     }
 
     @Override
@@ -390,6 +415,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     private final double fragmentationFactor;
     private final double safetyFactor;
     private final double loadFactor;
+    private final boolean reserveHash;
 
     private boolean initialized;
     private long consumedMemory;
@@ -407,7 +433,8 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
                                       final HashJoinHelperSizeCalculator hashJoinHelperSizeCalculator,
                                       final double fragmentationFactor,
                                       final double safetyFactor,
-                                      final double loadFactor) {
+                                      final double loadFactor,
+                                      final boolean reserveHash) {
       this.memoryAvailable = memoryAvailable;
       this.maxBatchNumRecords = maxBatchNumRecords;
       this.probeBatchSize = probeBatchSize;
@@ -420,6 +447,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       this.fragmentationFactor = fragmentationFactor;
       this.safetyFactor = safetyFactor;
       this.loadFactor = loadFactor;
+      this.reserveHash = reserveHash;
     }
 
     // TODO take an incoming Probe RecordBatch
@@ -433,9 +461,10 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         probeNumRecords,
         recordsPerPartitionBatchProbe,
         fragmentationFactor,
-        safetyFactor);
+        safetyFactor,
+        reserveHash);
 
-      maxProbeBatchSize = computeMaxBatchSize(
+      maxProbeBatchSize = computeMaxBatchSizeNoHash(
         probeBatchSize,
         probeNumRecords,
         maxBatchNumRecords,

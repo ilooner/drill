@@ -153,8 +153,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   private int cycleNum = 0; // primary, secondary, tertiary, etc.
   private int originalPartition = -1; // the partition a secondary reads from
   IntVector read_HV_vector; // HV vector that was read from the spilled batch
-  private int MAX_BATCHES_IN_MEMORY;
-  private int MAX_BATCHES_PER_PARTITION;
   private int inMemBatches;
 
   private static class HJSpilledPartition {
@@ -462,8 +460,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     bitsInMask = Integer.bitCount(partitionMask); // e.g. 0x1F -> 5
 
     RECORDS_PER_BATCH = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_ROWS_IN_BATCH_VALIDATOR);
-    MAX_BATCHES_IN_MEMORY = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_BATCHES_IN_MEMORY_VALIDATOR);
-    MAX_BATCHES_PER_PARTITION = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_BATCHES_PER_PARTITION_VALIDATOR);
 
     //  =================================
 
@@ -609,8 +605,9 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
             // We've sniffed first non empty build and probe batches
             buildCalc.initialize(
               false,
+              cycleNum == 0, // We only reserve the hash values on the first cycle. After the first cycle they are included.
               buildBatch,
-              hasProbeData ? probeBatch: null,
+              probeBatch,
               buildJoinColumns,
               allocator.getLimit(),
               numPartitions,

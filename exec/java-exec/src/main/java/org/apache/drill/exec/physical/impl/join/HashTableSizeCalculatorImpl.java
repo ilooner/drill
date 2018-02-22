@@ -21,6 +21,7 @@ import com.google.common.base.Preconditions;
 import org.apache.drill.common.types.TypeProtos;
 import org.apache.drill.exec.expr.TypeHelper;
 import org.apache.drill.exec.record.RecordBatch;
+import org.apache.drill.exec.vector.IntVector;
 
 import java.util.Map;
 
@@ -40,9 +41,6 @@ public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
     Preconditions.checkArgument(!keySizes.isEmpty());
     Preconditions.checkArgument(!partitionStat.isSpilled());
 
-    final long intSize =
-      ((long) TypeHelper.getSize(TypeProtos.MajorType.newBuilder().setMinorType(TypeProtos.MinorType.INT).build()));
-
     // The number of entries in the global index array. Note this array may not be completed populated and the degree of population depends on the load factor.
     long numBuckets = (long) (((double) partitionStat.getNumInMemoryRecords()) * (1.0 / loadFactor));
     // The number of pairs in the hash table
@@ -51,9 +49,9 @@ public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
     long numBatchHolders = (numEntries + maxNumRecords - 1) / maxNumRecords;
 
     // Include the size of the buckets array
-    long hashTableSize = computeValueVectorSize(numBuckets, intSize);
+    long hashTableSize = computeValueVectorSize(numBuckets, IntVector.VALUE_WIDTH);
     // Each Batch Holder has an int vector of max size for holding links and hash values
-    hashTableSize += numBatchHolders * 2L * intSize * ((long) maxNumRecords);
+    hashTableSize += numBatchHolders * 2L * IntVector.VALUE_WIDTH * ((long) maxNumRecords);
 
     long numFullBatchHolders = numEntries % maxNumRecords == 0? numBatchHolders: numBatchHolders - 1;
     // Compute the size of the value vectors holding keys in each full bucket

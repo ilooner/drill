@@ -22,14 +22,23 @@ import org.junit.Test;
 
 public class TestHashJoinMemoryCalculatorImpl {
   @Test
-  public void computeMaxBatchSizeTest() {
-    long expected = 1200;
-    long actual = HashJoinMemoryCalculatorImpl.computeMaxBatchSize(
+  public void testComputeMaxBatchSizeNoHash() {
+    final long expected = 1200;
+    final long actual = HashJoinMemoryCalculatorImpl.computeMaxBatchSize(
+      100,
+      25,
+      100,
+      2.0,
+      1.5,
+      false);
+    final long actualNoHash = HashJoinMemoryCalculatorImpl.computeMaxBatchSizeNoHash(
       100,
       25,
       100,
       2.0,
       1.5);
+
     Assert.assertEquals(expected, actual);
+    Assert.assertEquals(expected, actualNoHash);
   }
 }
