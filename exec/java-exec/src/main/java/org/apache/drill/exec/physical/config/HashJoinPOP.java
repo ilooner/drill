@@ -107,4 +107,9 @@ public class HashJoinPOP extends AbstractBase {
     public int getOperatorType() {
       return CoreOperatorType.HASH_JOIN_VALUE;
     }
+
+    @Override
+    public boolean isBufferedOperator() {
+        return true;
+    }
 }

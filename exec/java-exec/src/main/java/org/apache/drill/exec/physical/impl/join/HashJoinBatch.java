@@ -840,7 +840,14 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       JoinCondition cond = conditions.get(i);
       comparators.add(JoinUtils.checkAndReturnSupportedJoinComparator(cond));
     }
+
     this.allocator = oContext.getAllocator();
+
+    final long memLimit = context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_MEMORY_VALIDATOR);
+
+    if (memLimit != 0) {
+      allocator.setLimit(memLimit);
+    }
   }
 
   public void cleanup() {
