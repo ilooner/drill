@@ -285,7 +285,7 @@ public class TestProbingAndPartitioningImpl {
     }
 
     @Override
-    public long calculateSize(HashJoinMemoryCalculator.PartitionStat partitionStat, Map<String, Long> keySizes, double loadFactor) {
+    public long calculateSize(HashJoinMemoryCalculator.PartitionStat partitionStat, Map<String, Long> keySizes, double loadFactor, double safetyFactor) {
       return size;
     }
   }

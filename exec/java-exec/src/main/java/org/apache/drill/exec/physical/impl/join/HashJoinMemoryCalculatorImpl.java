@@ -320,6 +320,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       maxProbeBatchSize = computeMaxBatchSizeNoHash(probeBatchSize, probeNumRecords,
         maxBatchNumRecords, fragmentationFactor, safetyFactor);
 
+      // Safety factor can be multiplied at the end since these batches are coming from exchange operators, so no excess value vector doubling
       partitionBuildBatchSize = computeMaxBatchSize(buildBatchSize,
         buildNumRecords,
         recordsPerPartitionBatchBuild,
@@ -327,6 +328,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         safetyFactor,
         reserveHash);
 
+      // Safety factor can be multiplied at the end since these batches are coming from exchange operators, so no excess value vector doubling
       partitionProbeBatchSize = computeMaxBatchSize(
         probeBatchSize,
         probeNumRecords,
@@ -335,10 +337,10 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         safetyFactor,
         reserveHash);
 
-      maxOutputBatchSize = HashTableSizeCalculatorImpl.computeVectorSizes(keySizes, outputBatchNumRecords)
-        + HashTableSizeCalculatorImpl.computeVectorSizes(buildValueSizes, outputBatchNumRecords)
-        + HashTableSizeCalculatorImpl.computeVectorSizes(probeValueSizes, outputBatchNumRecords);
-      maxOutputBatchSize = RecordBatchSizer.multiplyByFactors(maxOutputBatchSize, fragmentationFactor, safetyFactor);
+      maxOutputBatchSize = HashTableSizeCalculatorImpl.computeVectorSizes(keySizes, outputBatchNumRecords, safetyFactor)
+        + HashTableSizeCalculatorImpl.computeVectorSizes(buildValueSizes, outputBatchNumRecords, safetyFactor)
+        + HashTableSizeCalculatorImpl.computeVectorSizes(probeValueSizes, outputBatchNumRecords, safetyFactor);
+      maxOutputBatchSize = RecordBatchSizer.multiplyByFactor(maxOutputBatchSize, fragmentationFactor);
 
       for (partitions = initialPartitions; partitions >= 1; partitions /= 2) {
         // The total amount of memory to reserve for incomplete batches across all partitions
@@ -529,6 +531,12 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       return roundUpToPowerOf2(naiveSize);
     }
 
+    public static long computeValueVectorSize(long numRecords, long byteSize, double safetyFactor)
+    {
+      long naiveSize = RecordBatchSizer.multiplyByFactor(numRecords * byteSize, safetyFactor);
+      return roundUpToPowerOf2(naiveSize);
+    }
+
     // TODO move to drill common
     public static long roundUpToPowerOf2(long num)
     {
@@ -575,7 +583,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
       for (int partitionIndex: buildPartitionStatSet.getInMemoryPartitions()) {
         final PartitionStat partitionStat = buildPartitionStatSet.get(partitionIndex);
-        consumedMemory += hashTableSizeCalculator.calculateSize(partitionStat, keySizes, loadFactor);
+        consumedMemory += hashTableSizeCalculator.calculateSize(partitionStat, keySizes, loadFactor, safetyFactor);
         consumedMemory += hashJoinHelperSizeCalculator.calculateSize(partitionStat);
       }
 

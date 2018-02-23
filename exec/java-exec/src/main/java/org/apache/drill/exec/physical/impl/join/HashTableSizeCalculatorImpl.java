@@ -18,6 +18,7 @@
 package org.apache.drill.exec.physical.impl.join;
 
 import com.google.common.base.Preconditions;
+import org.apache.drill.exec.record.RecordBatchSizer;
 import org.apache.drill.exec.vector.IntVector;
 
 import java.util.Map;
@@ -34,7 +35,8 @@ public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
   @Override
   public long calculateSize(final HashJoinMemoryCalculator.PartitionStat partitionStat,
                             final Map<String, Long> keySizes,
-                            final double loadFactor) {
+                            final double loadFactor,
+                            final double safetyFactor) {
     Preconditions.checkArgument(!keySizes.isEmpty());
     Preconditions.checkArgument(!partitionStat.isSpilled());
 
@@ -52,24 +54,24 @@ public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
 
     long numFullBatchHolders = numEntries % maxNumRecords == 0? numBatchHolders: numBatchHolders - 1;
     // Compute the size of the value vectors holding keys in each full bucket
-    hashTableSize += numFullBatchHolders * computeVectorSizes(keySizes, maxNumRecords);
+    hashTableSize += numFullBatchHolders * computeVectorSizes(keySizes, maxNumRecords, safetyFactor);
 
     if (numFullBatchHolders != numBatchHolders) {
       // The last bucket is a partial bucket
       long partialNumEntries = numEntries % maxNumRecords;
-      hashTableSize += computeVectorSizes(keySizes, partialNumEntries);
+      hashTableSize += computeVectorSizes(keySizes, partialNumEntries, safetyFactor);
     }
 
     return hashTableSize;
   }
 
   public static long computeVectorSizes(final Map<String, Long> vectorSizes,
-                                        final long numRecords)
-  {
+                                        final long numRecords,
+                                        final double safetyFactor) {
     long totalKeySize = 0L;
 
     for (Map.Entry<String, Long> entry: vectorSizes.entrySet()) {
-      totalKeySize += computeValueVectorSize(numRecords, entry.getValue());
+      totalKeySize += computeValueVectorSize(numRecords, entry.getValue(), safetyFactor);
     }
 
     return totalKeySize;
