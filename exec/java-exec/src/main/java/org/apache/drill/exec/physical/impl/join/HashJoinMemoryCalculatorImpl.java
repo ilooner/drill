@@ -80,7 +80,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       return size;
     }
 
-    long hashSize = ProbingAndPartitioningImpl.computeValueVectorSize(desiredNumRecords, IntVector.VALUE_WIDTH);
+    long hashSize = desiredNumRecords * ((long) IntVector.VALUE_WIDTH);
     hashSize = RecordBatchSizer.multiplyByFactors(hashSize, fragmentationFactor);
 
     return size + hashSize;
@@ -331,8 +331,14 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     public boolean addBatchToPartition(final int partitionIndex, final VectorContainer container) {
       final RecordBatchSizer batchSizer = new RecordBatchSizer(container);
       final int numRecords = batchSizer.rowCount();
-      final long batchSize = batchSizer.actualSize();
-      final long fragmentedBatchSize = (long) (batchSize * fragmentationFactor);
+      long batchSize = batchSizer.actualSize();
+
+      if (reserveHash) {
+        // Include the hash sizes for the batch
+        batchSize += ((long) IntVector.VALUE_WIDTH) * numRecords;
+      }
+
+      final long fragmentedBatchSize = RecordBatchSizer.multiplyByFactor(batchSize, fragmentationFactor);
 
       return addBatchToPartition(partitionIndex, numRecords, fragmentedBatchSize);
     }

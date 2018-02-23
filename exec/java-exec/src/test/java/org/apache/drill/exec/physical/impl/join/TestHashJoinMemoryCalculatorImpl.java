@@ -17,6 +17,7 @@
  */
 package org.apache.drill.exec.physical.impl.join;
 
+import org.apache.drill.exec.vector.IntVector;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -40,5 +41,27 @@ public class TestHashJoinMemoryCalculatorImpl {
 
     Assert.assertEquals(expected, actual);
     Assert.assertEquals(expected, actualNoHash);
+  }
+
+  @Test
+  public void testComputeMaxBatchSizeHash()
+  {
+    long expected = HashJoinMemoryCalculatorImpl.computeMaxBatchSizeNoHash(
+      100,
+      25,
+      100,
+      2.0,
+      4.0) +
+      100 * IntVector.VALUE_WIDTH * 2;
+
+    final long actual = HashJoinMemoryCalculatorImpl.computeMaxBatchSize(
+      100,
+      25,
+      100,
+      2.0,
+      4.0,
+      true);
+
+    Assert.assertEquals(expected, actual);
   }
 }

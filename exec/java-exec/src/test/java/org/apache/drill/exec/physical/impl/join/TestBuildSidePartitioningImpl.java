@@ -24,7 +24,7 @@ import org.junit.Test;
 
 public class TestBuildSidePartitioningImpl {
   @Test
-  public void testSimpleReserveMemoryCalculation() {
+  public void testSimpleReserveMemoryCalculationNoHash() {
     final HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl calc =
       new HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl(
         new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE),
@@ -50,6 +50,40 @@ public class TestBuildSidePartitioningImpl {
 
     long expectedReservedMemory = 60 // Max incoming batch size
       + 2 * 30 // build side batch for each spilled partition
+      + 60; // Max incoming probe batch size
+    long actualReservedMemory = calc.getReservedMemory();
+
+    Assert.assertEquals(expectedReservedMemory, actualReservedMemory);
+    Assert.assertEquals(2, calc.getNumPartitions());
+  }
+
+  @Test
+  public void testSimpleReserveMemoryCalculationHash() {
+    final HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl calc =
+      new HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl(
+        new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE),
+        HashJoinHelperSizeCalculatorImpl.INSTANCE,
+        20,
+        2.0,
+        1.5);
+
+    final CaseInsensitiveMap<Long> keySizes = CaseInsensitiveMap.newHashMap();
+
+    calc.initialize(false,
+      true,
+      keySizes,
+      350,
+      2,
+      20,
+      10,
+      20,
+      10,
+      10,
+      5,
+      .75);
+
+    long expectedReservedMemory = 60 // Max incoming batch size
+      + 2 * (/* data size for batch */ 30 + /* Space reserved for hash value vector */ 10 * 4 * 2) // build side batch for each spilled partition
       + 60; // Max incoming probe batch size
     long actualReservedMemory = calc.getReservedMemory();
 

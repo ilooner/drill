@@ -18,6 +18,7 @@
 package org.apache.drill.exec.physical.impl.join;
 
 import org.apache.drill.exec.exception.OutOfMemoryException;
+import org.apache.drill.exec.vector.IntVector;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -99,6 +100,47 @@ public class TestProbingAndPartitioningImpl {
     Assert.assertFalse(calc.shouldSpill());
     Assert.assertEquals(expected, calc.getConsumedMemory());
     Assert.assertNull(calc.next());
+  }
+
+  @Test
+  public void testProbingAndPartitioningBuildAllInMemoryNoSpillWithHash() {
+    final Map<String, Long> keySizes = org.apache.drill.common.map.CaseInsensitiveMap.newHashMap();
+    final HashJoinMemoryCalculator.PartitionStatSet buildPartitionStatSet =
+      new HashJoinMemoryCalculator.PartitionStatSet(2);
+
+    buildPartitionStatSet.get(0).spill();
+    buildPartitionStatSet.get(1).spill();
+
+    final long probeBatchSize = 10;
+    final int probeNumRecords = 10;
+    final int maxBatchNumRecords = 20;
+    final double fragmentationFactor = 2.0;
+    final double safetyFactor = 1.5;
+
+    HashJoinMemoryCalculatorImpl.ProbingAndPartitioningImpl calc =
+      new HashJoinMemoryCalculatorImpl.ProbingAndPartitioningImpl(
+        180,
+        maxBatchNumRecords,
+        probeBatchSize,
+        probeNumRecords,
+        5,
+        buildPartitionStatSet,
+        keySizes,
+        new MockHashTableSizeCalculator(10),
+        new MockHashJoinHelperSizeCalculator(10),
+        fragmentationFactor,
+        safetyFactor,
+        .75,
+        true);
+
+    calc.initialize();
+
+    long expected = 60 // maxProbeBatchSize
+      + 2 * 5 * 3 // partition batches
+      + 2 * 5 * IntVector.VALUE_WIDTH * 2; // hash values
+    Assert.assertFalse(calc.shouldSpill());
+    Assert.assertEquals(expected, calc.getConsumedMemory());
+    Assert.assertNotNull(calc.next());
   }
 
   @Test
