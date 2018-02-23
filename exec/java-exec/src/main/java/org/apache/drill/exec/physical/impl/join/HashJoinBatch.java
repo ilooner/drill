@@ -613,6 +613,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
               numPartitions,
               RECORDS_PER_BATCH,
               RECORDS_PER_BATCH,
+              TARGET_RECORDS_PER_BATCH,
               HashTable.DEFAULT_LOAD_FACTOR);
           }
         }

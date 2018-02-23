@@ -18,9 +18,6 @@
 package org.apache.drill.exec.physical.impl.join;
 
 import com.google.common.base.Preconditions;
-import org.apache.drill.common.types.TypeProtos;
-import org.apache.drill.exec.expr.TypeHelper;
-import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.vector.IntVector;
 
 import java.util.Map;
@@ -55,23 +52,23 @@ public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
 
     long numFullBatchHolders = numEntries % maxNumRecords == 0? numBatchHolders: numBatchHolders - 1;
     // Compute the size of the value vectors holding keys in each full bucket
-    hashTableSize += numFullBatchHolders * computeKeyVectorSizes(keySizes, maxNumRecords);
+    hashTableSize += numFullBatchHolders * computeVectorSizes(keySizes, maxNumRecords);
 
     if (numFullBatchHolders != numBatchHolders) {
       // The last bucket is a partial bucket
       long partialNumEntries = numEntries % maxNumRecords;
-      hashTableSize += computeKeyVectorSizes(keySizes, partialNumEntries);
+      hashTableSize += computeVectorSizes(keySizes, partialNumEntries);
     }
 
     return hashTableSize;
   }
 
-  public static long computeKeyVectorSizes(final Map<String, Long> keySizes,
-                                           final long numRecords)
+  public static long computeVectorSizes(final Map<String, Long> vectorSizes,
+                                        final long numRecords)
   {
     long totalKeySize = 0L;
 
-    for (Map.Entry<String, Long> entry: keySizes.entrySet()) {
+    for (Map.Entry<String, Long> entry: vectorSizes.entrySet()) {
       totalKeySize += computeValueVectorSize(numRecords, entry.getValue());
     }
 

@@ -33,10 +33,14 @@ public class TestBuildSidePartitioningImpl {
         2.0,
         1.5);
 
+    final CaseInsensitiveMap<Long> buildValueSizes = CaseInsensitiveMap.newHashMap();
+    final CaseInsensitiveMap<Long> probeValueSizes = CaseInsensitiveMap.newHashMap();
     final CaseInsensitiveMap<Long> keySizes = CaseInsensitiveMap.newHashMap();
 
     calc.initialize(true,
       false,
+      buildValueSizes,
+      probeValueSizes,
       keySizes,
       200,
       2,
@@ -46,6 +50,7 @@ public class TestBuildSidePartitioningImpl {
       10,
       10,
       5,
+      10,
       .75);
 
     long expectedReservedMemory = 60 // Max incoming batch size
@@ -67,10 +72,14 @@ public class TestBuildSidePartitioningImpl {
         2.0,
         1.5);
 
+    final CaseInsensitiveMap<Long> buildValueSizes = CaseInsensitiveMap.newHashMap();
+    final CaseInsensitiveMap<Long> probeValueSizes = CaseInsensitiveMap.newHashMap();
     final CaseInsensitiveMap<Long> keySizes = CaseInsensitiveMap.newHashMap();
 
     calc.initialize(false,
       true,
+      buildValueSizes,
+      probeValueSizes,
       keySizes,
       350,
       2,
@@ -80,6 +89,7 @@ public class TestBuildSidePartitioningImpl {
       10,
       10,
       5,
+      10,
       .75);
 
     long expectedReservedMemory = 60 // Max incoming batch size
@@ -102,11 +112,15 @@ public class TestBuildSidePartitioningImpl {
         2.0,
         1.5);
 
+    final CaseInsensitiveMap<Long> buildValueSizes = CaseInsensitiveMap.newHashMap();
+    final CaseInsensitiveMap<Long> probeValueSizes = CaseInsensitiveMap.newHashMap();
     final CaseInsensitiveMap<Long> keySizes = CaseInsensitiveMap.newHashMap();
 
     calc.initialize(
       true,
       false,
+      buildValueSizes,
+      probeValueSizes,
       keySizes,
       200,
       4,
@@ -116,6 +130,7 @@ public class TestBuildSidePartitioningImpl {
       10,
       10,
       5,
+      10,
       .75);
 
     long expectedReservedMemory = 60 // Max incoming batch size
@@ -138,11 +153,15 @@ public class TestBuildSidePartitioningImpl {
         2.0,
         1.5);
 
+    final CaseInsensitiveMap<Long> buildValueSizes = CaseInsensitiveMap.newHashMap();
+    final CaseInsensitiveMap<Long> probeValueSizes = CaseInsensitiveMap.newHashMap();
     final CaseInsensitiveMap<Long> keySizes = CaseInsensitiveMap.newHashMap();
 
     calc.initialize(
       true,
       false,
+      buildValueSizes,
+      probeValueSizes,
       keySizes,
       180,
       2,
@@ -152,6 +171,7 @@ public class TestBuildSidePartitioningImpl {
       10,
       10,
       5,
+      10,
       .75);
 
     long expectedReservedMemory = 60 // Max incoming batch size
@@ -178,11 +198,15 @@ public class TestBuildSidePartitioningImpl {
         2.0,
         1.5);
 
+    final CaseInsensitiveMap<Long> buildValueSizes = CaseInsensitiveMap.newHashMap();
+    final CaseInsensitiveMap<Long> probeValueSizes = CaseInsensitiveMap.newHashMap();
     final CaseInsensitiveMap<Long> keySizes = CaseInsensitiveMap.newHashMap();
 
     calc.initialize(
       true,
       false,
+      buildValueSizes,
+      probeValueSizes,
       keySizes,
       210,
       2,
@@ -192,6 +216,7 @@ public class TestBuildSidePartitioningImpl {
       10,
       10,
       5,
+      10,
       .75);
 
     Assert.assertFalse(calc.isSpilled(0));
