@@ -65,9 +65,9 @@ public class TestProbingAndPartitioningImpl {
     final int recordsPerPartitionBatchBuild = 10;
 
     addBatches(buildPartitionStatSet.get(0), recordsPerPartitionBatchBuild,
-      10, 8);
+      10, 4);
     addBatches(buildPartitionStatSet.get(1), recordsPerPartitionBatchBuild,
-      10, 8);
+      10, 4);
 
     final double fragmentationFactor = 2.0;
     final double safetyFactor = 1.5;
@@ -142,9 +142,9 @@ public class TestProbingAndPartitioningImpl {
     final int recordsPerPartitionBatchBuild = 10;
 
     addBatches(buildPartitionStatSet.get(0), recordsPerPartitionBatchBuild,
-      10, 8);
+      10, 4);
     addBatches(buildPartitionStatSet.get(1), recordsPerPartitionBatchBuild,
-      10, 8);
+      10, 4);
 
     final double fragmentationFactor = 2.0;
     final double safetyFactor = 1.5;
@@ -192,9 +192,9 @@ public class TestProbingAndPartitioningImpl {
     buildPartitionStatSet.get(0).spill();
     buildPartitionStatSet.get(1).spill();
     addBatches(buildPartitionStatSet.get(2), recordsPerPartitionBatchBuild,
-      10, 8);
+      10, 4);
     addBatches(buildPartitionStatSet.get(3), recordsPerPartitionBatchBuild,
-      10, 8);
+      10, 4);
 
     final double fragmentationFactor = 2.0;
     final double safetyFactor = 1.5;

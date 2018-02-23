@@ -408,7 +408,8 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       final PartitionStat partitionStat = partitionStatsSet.get(partitionIndex);
       partitionStat.add(new BatchStat(numRecords, batchSize));
 
-      long consumedMemory = partitionStatsSet.getConsumedMemory() + reservedMemory;
+      long consumedMemory = RecordBatchSizer.multiplyByFactor(partitionStatsSet.getConsumedMemory(), fragmentationFactor)
+        + reservedMemory;
       return consumedMemory > memoryAvailable;
     }
 
@@ -558,7 +559,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
       // We are consuming our reserved memory plus the amount of memory for each build side
       // batch and the size of the hashtables and the size of the join helpers
-      consumedMemory = reservedMemory + buildPartitionStatSet.getConsumedMemory();
+      consumedMemory = reservedMemory + RecordBatchSizer.multiplyByFactor(buildPartitionStatSet.getConsumedMemory(), fragmentationFactor);
 
       // Handle early completion conditions
       if (buildPartitionStatSet.noneSpilled()) {

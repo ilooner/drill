@@ -184,7 +184,7 @@ public class TestBuildSidePartitioningImpl {
     Assert.assertFalse(calc.isSpilled(0));
     Assert.assertFalse(calc.isSpilled(1));
 
-    boolean spill = calc.addBatchToPartition(0, 10, 15);
+    boolean spill = calc.addBatchToPartition(0, 10, 8);
     Assert.assertTrue(spill);
   }
 
@@ -224,7 +224,7 @@ public class TestBuildSidePartitioningImpl {
 
     // Add to partition 0, no spill needed
     {
-      boolean spill = calc.addBatchToPartition(0, 10, 15);
+      boolean spill = calc.addBatchToPartition(0, 10, 7);
       Assert.assertFalse(spill);
 
       Assert.assertFalse(calc.isSpilled(0));
@@ -233,7 +233,7 @@ public class TestBuildSidePartitioningImpl {
 
     // Add to partition 1, no spill needed
     {
-      boolean spill = calc.addBatchToPartition(1, 10, 15);
+      boolean spill = calc.addBatchToPartition(1, 10, 8);
       Assert.assertFalse(spill);
 
       Assert.assertFalse(calc.isSpilled(0));
@@ -242,7 +242,7 @@ public class TestBuildSidePartitioningImpl {
 
     // Add to partition 0, and partition 0 spilled
     {
-      boolean spill = calc.addBatchToPartition(0, 10, 15);
+      boolean spill = calc.addBatchToPartition(0, 10, 8);
       Assert.assertTrue(spill);
 
       calc.spill(0);
@@ -253,7 +253,7 @@ public class TestBuildSidePartitioningImpl {
 
     // Add to partition 1, no spill needed
     {
-      boolean spill = calc.addBatchToPartition(1, 10, 15);
+      boolean spill = calc.addBatchToPartition(1, 10, 7);
       Assert.assertFalse(spill);
 
       Assert.assertTrue(calc.isSpilled(0));
@@ -262,7 +262,7 @@ public class TestBuildSidePartitioningImpl {
 
     // Add to partition 1, and partition 1 spilled
     {
-      boolean spill = calc.addBatchToPartition(1, 10, 15);
+      boolean spill = calc.addBatchToPartition(1, 10, 8);
       Assert.assertTrue(spill);
 
       calc.spill(1);
