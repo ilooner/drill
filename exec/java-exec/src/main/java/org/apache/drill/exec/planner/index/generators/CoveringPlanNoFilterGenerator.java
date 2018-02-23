@@ -31,11 +31,13 @@ import org.apache.drill.exec.planner.index.FunctionalIndexInfo;
 import org.apache.drill.exec.planner.index.IndexPlanUtils;
 import org.apache.drill.exec.planner.logical.DrillParseContext;
 import org.apache.drill.exec.planner.physical.PlannerSettings;
-import org.apache.drill.exec.planner.physical.ScanPrel;
+import org.apache.drill.exec.planner.physical.LimitPrel;
+import org.apache.drill.exec.planner.physical.SortPrel;
 import org.apache.drill.exec.planner.physical.ProjectPrel;
-import org.apache.drill.exec.planner.physical.Prel;
 import org.apache.drill.exec.planner.physical.PrelUtil;
+import org.apache.drill.exec.planner.physical.ScanPrel;
 import org.apache.drill.exec.planner.physical.Prule;
+import org.apache.drill.exec.planner.physical.Prel;
 import org.apache.drill.exec.physical.base.DbGroupScan;
 import java.util.List;
 
@@ -63,7 +65,7 @@ public class CoveringPlanNoFilterGenerator extends AbstractIndexPlanGenerator {
   }
 
   public RelNode convertChild() throws InvalidRelException {
-
+    Preconditions.checkNotNull(indexContext.getSort());
     if (indexGroupScan == null) {
       logger.error("Null indexgroupScan in CoveringIndexPlanGenerator.convertChild");
       return null;
@@ -107,11 +109,9 @@ public class CoveringPlanNoFilterGenerator extends AbstractIndexPlanGenerator {
       }
     }
 
-    if (indexContext.getSort() != null) {
-      finalRel = getSortNode(indexContext, finalRel, true, isSingletonSortedStream, indexContext.getExchange() != null);
-      if (finalRel == null) {
-        return null;
-      }
+    finalRel = getSortNode(indexContext, finalRel, true, isSingletonSortedStream, indexContext.getExchange() != null);
+    if (finalRel == null) {
+      return null;
     }
 
     finalRel = Prule.convert(finalRel, finalRel.getTraitSet().plus(Prel.DRILL_PHYSICAL));

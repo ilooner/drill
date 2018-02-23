@@ -1221,6 +1221,17 @@ public class IndexPlanTest extends BaseJsonTest {
   }
 
   @Test
+  public void testNoFilterAndLimitOrderByCoveringPlan() throws Exception {
+    String query = "SELECT t.`id`.`ssn` AS `ssn`, t.contact.phone as phone FROM hbase.`index_test_primary` as t " +
+            "order by t.id.ssn";
+    test(defaultHavingIndexPlan);
+    PlanTestBase.testPlanMatchingPatterns(query,
+            new String[] {"Sort"},
+            new String[]{"indexName=*", "RowKeyJoin", "TopN"}
+    );
+  }
+
+  @Test
   public void testNoFilterOrderByCast() throws Exception {
     String query = "SELECT CAST(t.id.ssn as INT) AS `ssn`, t.contact.phone as phone FROM hbase.`index_test_primary` as t " +
         "order by CAST(t.id.ssn as INT) limit 2";
@@ -1236,6 +1247,17 @@ public class IndexPlanTest extends BaseJsonTest {
         .baselineColumns("ssn", "phone").baselineValues(100000001, "6500001411")
         .build()
         .run();
+  }
+
+  @Test
+  public void testNoFilterAndLimitOrderByCast() throws Exception {
+    String query = "SELECT CAST(t.id.ssn as INT) AS `ssn`, t.contact.phone as phone FROM hbase.`index_test_primary` as t " +
+            "order by CAST(t.id.ssn as INT)";
+    test(defaultHavingIndexPlan);
+    PlanTestBase.testPlanMatchingPatterns(query,
+            new String[] { "Sort"},
+            new String[]{"indexName=*","TopN", "RowKeyJoin"}
+    );
   }
 
   @Test
@@ -1619,8 +1641,8 @@ public class IndexPlanTest extends BaseJsonTest {
     try {
       test(defaultHavingIndexPlan + ";" + disableFTS + ";" + sliceTargetSmall + ";");
       PlanTestBase.testPlanWithAttributesMatchingPatterns(query,
-              new String[]{"RowKeyJoin", ".*RestrictedJsonTableGroupScan.*tableName=.*index_test_primary.*rowcount = 1000.0"},
-              new String[]{}
+              new String[]{"RowKeyJoin", ".*RestrictedJsonTableGroupScan.*"},
+              new String[]{".*tableName=.*index_test_primary.*rowcount = 7.*"}
       );
     } finally {
       test(enableFTS);

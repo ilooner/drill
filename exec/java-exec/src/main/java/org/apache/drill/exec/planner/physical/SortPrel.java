@@ -23,6 +23,7 @@ import java.util.Iterator;
 import org.apache.drill.exec.ExecConstants;
 import org.apache.drill.exec.physical.base.PhysicalOperator;
 import org.apache.drill.exec.physical.config.ExternalSort;
+import org.apache.drill.exec.planner.common.OrderedRel;
 import org.apache.drill.exec.planner.cost.DrillCostBase;
 import org.apache.drill.exec.planner.cost.DrillCostBase.DrillCostFactory;
 import org.apache.drill.exec.planner.physical.visitor.PrelVisitor;
@@ -36,16 +37,25 @@ import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rex.RexNode;
 
-public class SortPrel extends org.apache.calcite.rel.core.Sort implements Prel {
+public class SortPrel extends org.apache.calcite.rel.core.Sort implements OrderedRel,Prel {
+  private final boolean isRemovable;
 
   /** Creates a DrillSortRel. */
   public SortPrel(RelOptCluster cluster, RelTraitSet traits, RelNode input, RelCollation collation) {
     super(cluster, traits, input, collation);
+    isRemovable = true;
   }
 
   /** Creates a DrillSortRel with offset and fetch. */
   public SortPrel(RelOptCluster cluster, RelTraitSet traits, RelNode input, RelCollation collation, RexNode offset, RexNode fetch) {
     super(cluster, traits, input, collation, offset, fetch);
+    isRemovable = true;
+  }
+
+  /** Creates a DrillSortRel. */
+  public SortPrel(RelOptCluster cluster, RelTraitSet traits, RelNode input, RelCollation collation, boolean isRemovable) {
+    super(cluster, traits, input, collation);
+    this.isRemovable = isRemovable;
   }
 
   @Override
@@ -119,4 +129,18 @@ public class SortPrel extends org.apache.calcite.rel.core.Sort implements Prel {
     return true;
   }
 
+  @Override
+  public RexNode getOffset() {
+    return offset;
+  }
+
+  @Override
+  public RexNode getFetch() {
+    return fetch;
+  }
+
+  @Override
+  public boolean canBeDropped() {
+    return isRemovable;
+  }
 }
