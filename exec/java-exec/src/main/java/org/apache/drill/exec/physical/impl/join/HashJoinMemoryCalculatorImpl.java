@@ -40,12 +40,15 @@ import static org.apache.drill.exec.physical.impl.join.HashJoinState.INITIALIZIN
 
 public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
+  public static final double FRAGMENTATION_FACTOR = 1.0 / SortMemoryManager.PAYLOAD_FROM_BUFFER;
+  public static final double SAFETY_FACTOR = 1.2;
+
   public BuildSidePartitioning next() {
     return new BuildSidePartitioningImpl(new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE),
       HashJoinHelperSizeCalculatorImpl.INSTANCE,
       RecordBatch.MAX_BATCH_SIZE,
-      1.0 / SortMemoryManager.PAYLOAD_FROM_BUFFER,
-      1.2);
+      FRAGMENTATION_FACTOR,
+      SAFETY_FACTOR);
   }
 
   @Override
@@ -365,8 +368,8 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
           break;
         }
 
-        if (partitions == 1) {
-          // Can't have fewer than 1 partition
+        if (partitions == 2) {
+          // Can't have fewer than 2 partitions
           break;
         }
       }
@@ -375,8 +378,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         // We don't have enough memory we need to fail or warn
 
         String message = String.format("HashJoin needs to reserve %d bytes of memory but there are " +
-          "only %d bytes available. Using %d num partitions with %d initial partitions. " +
-          "Please descrease the number of partitions. Additional info:\n" +
+          "only %d bytes available. Using %d num partitions with %d initial partitions. Additional info:\n" +
           "buildBatchSize = %d\n" +
           "buildNumRecords = %d\n" +
           "partitionBuildBatchSize = %d\n" +
@@ -406,12 +408,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         }
 
         message = phase + message;
-
-        if (!autoTune) {
-          log.warn(message);
-        } else {
-          throw new OutOfMemoryException(message);
-        }
+        log.warn(message);
       }
     }
 
