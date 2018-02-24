@@ -177,6 +177,7 @@ public class TestLargeFileCompilation extends BaseTestQuery {
       testNoResult("alter session set `%s`='JDK'", ClassCompilerSelector.JAVA_COMPILER_OPTION);
       testNoResult("alter session set `planner.enable_mergejoin` = false");
       testNoResult("alter session set `planner.enable_nestedloopjoin` = false");
+      setSessionOption(ExecConstants.HASHJOIN_NUM_PARTITIONS_KEY, 1);
       testNoResult("use dfs.tmp");
       testNoResult(LARGE_TABLE_WRITER, tableName);
       testNoResult(QUERY_WITH_JOIN, tableName);
@@ -184,6 +185,7 @@ public class TestLargeFileCompilation extends BaseTestQuery {
       testNoResult("alter session reset `planner.enable_mergejoin`");
       testNoResult("alter session reset `planner.enable_nestedloopjoin`");
       testNoResult("alter session reset `%s`", ClassCompilerSelector.JAVA_COMPILER_OPTION);
+      resetSessionOption(ExecConstants.HASHJOIN_NUM_PARTITIONS_KEY);
       testNoResult("drop table if exists %s", tableName);
     }
   }

@@ -141,8 +141,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   // Local fields for left/right incoming - may be replaced when reading from spilled
   private RecordBatch buildBatch = right;
   private RecordBatch probeBatch = left;
-  // private RecordBatch left;
-  // private RecordBatch right;
+  private boolean setup;
 
   // For handling spilling
   private SpillSet spillSet;
@@ -279,7 +278,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         //
         //  (recursively) Handle the spilled partitions, if any
         //
-        if ( !buildSideIsEmpty && !spilledPartitionsList.isEmpty()) {
+        if ( !buildSideIsEmpty && setup && !spilledPartitionsList.isEmpty()) {
           // Get the next (previously) spilled partition to handle as incoming
           HJSpilledPartition currSp = spilledPartitionsList.remove(0);
 
@@ -449,17 +448,9 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     //  ================================
 
     // Set the number of partitions from the configuration (raise to a power of two, if needed)
-    numPartitions = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_PARTITIONS_VALIDATOR);
-    if ( numPartitions == 1 ) { //
-      canSpill = false;
-      logger.warn("Spilling is disabled due to configuration setting of num_partitions to 1");
-    }
-    numPartitions = BaseAllocator.nextPowerOfTwo(numPartitions); // in case not a power of 2
     // Based on the number of partitions: Set the mask and bit count
     partitionMask = numPartitions - 1; // e.g. 32 --> 0x1F
     bitsInMask = Integer.bitCount(partitionMask); // e.g. 0x1F -> 5
-
-    RECORDS_PER_BATCH = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_ROWS_IN_BATCH_VALIDATOR);
 
     //  =================================
 
@@ -499,9 +490,9 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       tmpBatchesList[i] = new ArrayList<>();
     }
     // position of the new "column" for keeping the hash values (after the real columns)
-    rightHVColPosition = buildBatch.getContainer().getNumberOfColumns() ;
+    rightHVColPosition = buildBatch.getContainer().getNumberOfColumns();
 
-    buildSideIsEmpty = false;
+    setup = true;
   }
 
   /**
@@ -540,14 +531,11 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
    */
   public void executeBuildPhase() throws SchemaChangeException, ClassTransformationException, IOException {
     final HashJoinMemoryCalculator.BuildSidePartitioning buildCalc = new HashJoinMemoryCalculatorImpl().next();
+    final boolean firstCycle = cycleNum == 0;
+
     boolean hasProbeData = true;
 
     if ( rightUpstream == IterOutcome.NONE ) { return; } // empty right
-
-    //Setup the underlying hash table
-    if ( cycleNum == 0 ) { delayedSetup(); } // first time only
-
-    initializeBuild();
 
     boolean firstDataBuild = false;
     boolean moreData = true;
@@ -573,49 +561,58 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
             throw new SchemaChangeException(errorMsg);
           }
-          setupHashTable();
         } else {
           if (!rightSchema.equals(buildBatch.getSchema())) {
             throw SchemaChangeException.schemaChanged("Hash join does not support schema changes in build side.", rightSchema, buildBatch.getSchema());
           }
-          for (int i = 0; i < numPartitions; i++) { hashTables[i].updateBatches(); }
         }
 
         // Fall through
       case OK:
         final int currentRecordCount = buildBatch.getRecordCount();
 
-        if (!firstDataBuild && currentRecordCount > 0 && canSpill) {
+        if (!firstDataBuild && currentRecordCount > 0) {
           firstDataBuild = true;
 
-          if (leftUpstream == IterOutcome.NONE) {
-            // No probe data
-            hasProbeData = false;
-          } else {
-            if (recordsToProcess == 0) {
-              // Sniff the first non empty batch
-              executeProbePhase(true);
+          if (canSpill) {
+            if (leftUpstream == IterOutcome.NONE) {
+              // No probe data
+              hasProbeData = false;
+            } else {
+              if (recordsToProcess == 0) {
+                // Sniff the first non empty batch
+                executeProbePhase(true);
+              }
+
+              // If no non empty probe batch is found there is no probe data.
+              hasProbeData = recordsToProcess != 0;
             }
 
-            // If no non empty probe batch is found there is no probe data.
-            hasProbeData = recordsToProcess != 0;
+            if (hasProbeData) {
+              // We've sniffed first non empty build and probe batches
+              buildCalc.initialize(firstCycle, // We auto tune only on the first cycle
+                firstCycle, // We only reserve the hash values on the first cycle. After the first cycle they are included.
+                buildBatch,
+                probeBatch,
+                buildJoinColumns,
+                allocator.getLimit(),
+                numPartitions,
+                RECORDS_PER_BATCH,
+                RECORDS_PER_BATCH,
+                TARGET_RECORDS_PER_BATCH,
+                HashTable.DEFAULT_LOAD_FACTOR);
+
+              if (firstCycle) {
+                numPartitions = buildCalc.getNumPartitions();
+              }
+            }
           }
 
-          if (hasProbeData) {
-            // We've sniffed first non empty build and probe batches
-            buildCalc.initialize(
-              false,
-              cycleNum == 0, // We only reserve the hash values on the first cycle. After the first cycle they are included.
-              buildBatch,
-              probeBatch,
-              buildJoinColumns,
-              allocator.getLimit(),
-              numPartitions,
-              RECORDS_PER_BATCH,
-              RECORDS_PER_BATCH,
-              TARGET_RECORDS_PER_BATCH,
-              HashTable.DEFAULT_LOAD_FACTOR);
-          }
+          delayedSetup();
+          initializeBuild();
+          setupHashTable();
+
+          for (int i = 0; i < numPartitions; i++) { hashTables[i].updateBatches(); }
         }
 
         if ( cycleNum > 0 ) {
@@ -652,6 +649,18 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       }
       // Get the next incoming record batch
       rightUpstream = next(HashJoinHelper.RIGHT_INPUT, buildBatch);
+    }
+
+    if (!firstDataBuild) {
+      // Incase we never recieved any build data still do the necessary setup
+
+      delayedSetup();
+      initializeBuild();
+      setupHashTable();
+
+      for (int i = 0; i < numPartitions; i++) {
+        hashTables[i].updateBatches();
+      }
     }
 
     // Move the remaining current batches into their temp lists
@@ -839,6 +848,16 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       comparators.add(JoinUtils.checkAndReturnSupportedJoinComparator(cond));
     }
 
+    numPartitions = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_PARTITIONS_VALIDATOR);
+    if ( numPartitions == 1 ) { //
+      canSpill = false;
+      logger.warn("Spilling is disabled due to configuration setting of num_partitions to 1");
+    }
+
+    numPartitions = BaseAllocator.nextPowerOfTwo(numPartitions); // in case not a power of 2
+    RECORDS_PER_BATCH = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_ROWS_IN_BATCH_VALIDATOR);
+    buildSideIsEmpty = false;
+
     this.allocator = oContext.getAllocator();
 
     final long memLimit = context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_MEMORY_VALIDATOR);
@@ -849,7 +868,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   }
 
   public void cleanup() {
-    if ( buildSideIsEmpty ) { return; } // not set up; nothing to clean
+    if ( buildSideIsEmpty || !setup ) { return; } // not set up; nothing to clean
     if ( spillSet.getWriteBytes() > 0 ) {
       stats.setLongStat(Metric.SPILL_MB, // update stats - total MB spilled
         (int) Math.round(spillSet.getWriteBytes() / 1024.0D / 1024.0));
@@ -1345,7 +1364,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
    * Free any remaining in-memory batches, HV vectors, hash tables, helpers, etc.
    */
   private void freeInMemData() {
-    if ( buildSideIsEmpty ) { return; }
+    if ( buildSideIsEmpty || !setup ) { return; }
     for (int part = 0; part < numPartitions; part++) {
 
       if (partitionContainers != null && partitionContainers.size() > part) {

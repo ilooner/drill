@@ -273,7 +273,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
                               int outputBatchNumRecords,
                               double loadFactor) {
       Preconditions.checkState(!initialized);
-
+      Preconditions.checkArgument(initialPartitions >= 1);
       initialized = true;
 
       this.loadFactor = loadFactor;
@@ -337,12 +337,13 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         safetyFactor,
         reserveHash);
 
-      maxOutputBatchSize = HashTableSizeCalculatorImpl.computeVectorSizes(keySizes, outputBatchNumRecords, safetyFactor)
-        + HashTableSizeCalculatorImpl.computeVectorSizes(buildValueSizes, outputBatchNumRecords, safetyFactor)
-        + HashTableSizeCalculatorImpl.computeVectorSizes(probeValueSizes, outputBatchNumRecords, safetyFactor);
-      maxOutputBatchSize = RecordBatchSizer.multiplyByFactor(maxOutputBatchSize, fragmentationFactor);
+      maxOutputBatchSize = computeMaxOutputBatchSize(buildValueSizes, probeValueSizes, keySizes,
+        outputBatchNumRecords, safetyFactor, fragmentationFactor);
 
-      for (partitions = initialPartitions; partitions >= 1; partitions /= 2) {
+      long maxReservedMemory;
+      long probeReservedMemory;
+
+      for (partitions = initialPartitions;; partitions /= 2) {
         // The total amount of memory to reserve for incomplete batches across all partitions
         long incompletePartitionsBatchSizes = ((long) partitions) * partitionBuildBatchSize;
         // We need to reserve all the space for incomplete batches, and the incoming batch as well as the
@@ -351,34 +352,79 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         // they will have a well defined size.
         reservedMemory = incompletePartitionsBatchSizes + maxBuildBatchSize + maxProbeBatchSize;
 
-        /*
-        ProbingAndPartitioningImpl.calculateReservedMemory(
+        probeReservedMemory = ProbingAndPartitioningImpl.calculateReservedMemory(
           partitions,
           maxProbeBatchSize,
-          partitionProbeBatchSize,
-          memoryAvailable);*/
+          maxOutputBatchSize,
+          partitionProbeBatchSize);
 
-        if (!autoTune || reservedMemory <= memoryAvailable) {
+        maxReservedMemory = Math.max(reservedMemory, probeReservedMemory);
+
+        if (!autoTune || maxReservedMemory <= memoryAvailable) {
           // Stop the tuning loop if we are not doing auto tuning, or if we are living within our memory limit
+          break;
+        }
+
+        if (partitions == 1) {
+          // Can't have fewer than 1 partition
           break;
         }
       }
 
-      if (reservedMemory > memoryAvailable) {
-        final String message = String.format("HashJoin needs to reserve %d bytes of memory but there are " +
+      if (maxReservedMemory > memoryAvailable) {
+        // We don't have enough memory we need to fail or warn
+        
+        String message = String.format("HashJoin needs to reserve %d bytes of memory but there are " +
           "only %d bytes available. Using %d num partitions with %d initial partitions. " +
           "Please descrease the number of partitions. Additional info:\n" +
           "buildBatchSize = %d\n" +
           "buildNumRecords = %d\n" +
           "partitionBuildBatchSize = %d\n" +
-          "recordsPerPartitionBatchBuild = %d\n",
+          "recordsPerPartitionBatchBuild = %d\n" +
+          "probeBatchSize = %d\n" +
+          "probeNumRecords = %d\n" +
+          "partitionProbeBatchSize = %d\n" +
+          "recordsPerPartitionBatchProbe = %d\n",
           reservedMemory, memoryAvailable, partitions, initialPartitions,
           buildBatchSize,
           buildNumRecords,
           partitionBuildBatchSize,
-          recordsPerPartitionBatchBuild);
-        throw new OutOfMemoryException(message);
+          recordsPerPartitionBatchBuild,
+          probeBatchSize,
+          probeNumRecords,
+          partitionProbeBatchSize,
+          recordsPerPartitionBatchProbe);
+
+        String phase = "Probe phase: ";
+
+        if (reservedMemory > memoryAvailable) {
+          if (probeReservedMemory > memoryAvailable) {
+            phase = "Build and Probe phases: ";
+          } else {
+            phase = "Build phase: ";
+          }
+        }
+
+        message = phase + message;
+
+        if (!autoTune) {
+          log.warn(message);
+        } else {
+          throw new OutOfMemoryException(message);
+        }
       }
+    }
+
+    public static long computeMaxOutputBatchSize(Map<String, Long> buildValueSizes,
+                                                 Map<String, Long> probeValueSizes,
+                                                 Map<String, Long> keySizes,
+                                                 int outputNumRecords,
+                                                 double safetyFactor,
+                                                 double fragmentationFactor) {
+      long outputSize = HashTableSizeCalculatorImpl.computeVectorSizes(keySizes, outputNumRecords, safetyFactor)
+        + HashTableSizeCalculatorImpl.computeVectorSizes(buildValueSizes, outputNumRecords, safetyFactor)
+        + HashTableSizeCalculatorImpl.computeVectorSizes(probeValueSizes, outputNumRecords, safetyFactor);
+      return RecordBatchSizer.multiplyByFactor(outputSize, fragmentationFactor);
     }
 
     public boolean isSpilled(int partitionIndex) {
