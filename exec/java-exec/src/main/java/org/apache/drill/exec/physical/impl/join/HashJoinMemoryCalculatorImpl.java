@@ -626,6 +626,13 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
       for (int partitionIndex: buildPartitionStatSet.getInMemoryPartitions()) {
         final PartitionStat partitionStat = buildPartitionStatSet.get(partitionIndex);
+
+        if (partitionStat.getNumInMemoryRecords() == 0) {
+          // TODO Hash hoin still allocates empty hash tables and hash join helpers. We should fix hash join
+          // not to allocate empty tables and helpers.
+          continue;
+        }
+
         consumedMemory += hashTableSizeCalculator.calculateSize(partitionStat, keySizes, loadFactor, safetyFactor);
         consumedMemory += hashJoinHelperSizeCalculator.calculateSize(partitionStat);
       }

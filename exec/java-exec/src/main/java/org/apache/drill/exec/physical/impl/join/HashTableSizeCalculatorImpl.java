@@ -26,6 +26,7 @@ import java.util.Map;
 import static org.apache.drill.exec.physical.impl.join.HashJoinMemoryCalculatorImpl.ProbingAndPartitioningImpl.computeValueVectorSize;
 
 public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
+  public static final double HASHTABLE_DOUBLING_FACTOR = 1.5;
   private final int maxNumRecords;
 
   public HashTableSizeCalculatorImpl(int maxNumRecords) {
@@ -39,6 +40,7 @@ public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
                             final double safetyFactor) {
     Preconditions.checkArgument(!keySizes.isEmpty());
     Preconditions.checkArgument(!partitionStat.isSpilled());
+    Preconditions.checkArgument(partitionStat.getNumInMemoryRecords() > 0);
 
     // The number of entries in the global index array. Note this array may not be completed populated and the degree of population depends on the load factor.
     long numBuckets = (long) (((double) partitionStat.getNumInMemoryRecords()) * (1.0 / loadFactor));
@@ -62,7 +64,7 @@ public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
       hashTableSize += computeVectorSizes(keySizes, partialNumEntries, safetyFactor);
     }
 
-    return hashTableSize;
+    return RecordBatchSizer.multiplyByFactor(hashTableSize, HASHTABLE_DOUBLING_FACTOR);
   }
 
   public static long computeVectorSizes(final Map<String, Long> vectorSizes,

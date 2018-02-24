@@ -20,7 +20,7 @@ package org.apache.drill.exec.physical.impl.join;
 import com.google.common.collect.Maps;
 import org.apache.drill.common.types.TypeProtos;
 import org.apache.drill.exec.expr.TypeHelper;
-import org.apache.drill.exec.record.RecordBatch;
+import org.apache.drill.exec.record.RecordBatchSizer;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -52,6 +52,9 @@ public class TestHashTableSizeCalculatorImpl {
     // Overhead vectors for links and hash values for each batchHolder
     expected += 2 * intSize // links and hash values */
        * 2 * maxNumRecords; // num batch holders
+
+    // Multiply by doubling factor
+    expected = RecordBatchSizer.multiplyByFactor(expected, HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR);
 
     HashJoinMemoryCalculator.PartitionStat partitionStat = new HashJoinMemoryCalculator.PartitionStat();
     partitionStat.add(
