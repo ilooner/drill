@@ -373,7 +373,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
       if (maxReservedMemory > memoryAvailable) {
         // We don't have enough memory we need to fail or warn
-        
+
         String message = String.format("HashJoin needs to reserve %d bytes of memory but there are " +
           "only %d bytes available. Using %d num partitions with %d initial partitions. " +
           "Please descrease the number of partitions. Additional info:\n" +
