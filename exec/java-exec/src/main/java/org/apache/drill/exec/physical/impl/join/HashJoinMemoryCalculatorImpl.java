@@ -613,13 +613,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       consumedMemory = reservedMemory + RecordBatchSizer.multiplyByFactor(buildPartitionStatSet.getConsumedMemory(), fragmentationFactor);
 
       // Handle early completion conditions
-      if (buildPartitionStatSet.noneSpilled()) {
-        if (consumedMemory <= memoryAvailable) {
-          // If all the build side partitions are already in memory we don't need to spill probe side
-          // partitions, so we don't need to evict any build side partitions.
-          return false;
-        }
-      } else if (buildPartitionStatSet.allSpilled()) {
+      if (buildPartitionStatSet.allSpilled()) {
         // All build side partitions are spilled so our memory calculation is complete
         return false;
       }

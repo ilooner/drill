@@ -166,7 +166,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   private ArrayList<HJSpilledPartition> spilledPartitionsList;
   private HJSpilledPartition spilledInners[]; // for the outer to find the partition
 
-  private int operatorId; // for the spill file name
+  private String operatorId; // for the spill file name
   public enum Metric implements MetricDef {
 
     NUM_BUCKETS,
@@ -608,7 +608,10 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
             }
           }
 
-          delayedSetup();
+          if (firstCycle) {
+            delayedSetup();
+          }
+
           initializeBuild();
           setupHashTable();
 
@@ -706,6 +709,10 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     //  Traverse all the in-memory partitions' incoming batches, and build their hash tables
     //
     for (int currPart = 0; currPart < numPartitions; currPart++) {
+      // each partition is a regular array of batches
+      ArrayList<VectorContainer> thisPart = new ArrayList<>();
+      partitionContainers.add(thisPart);
+
       if (isSpilled(currPart)) {
         continue;
       }
@@ -713,11 +720,23 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       if (canSpill && hasProbeData && firstDataBuild && probeCalc.shouldSpill()) {
         spillAPartition(tmpBatchesList[currPart], currPart, "inner");
         probeCalc.spill(currPart);
+
+        HJSpilledPartition sp = new HJSpilledPartition();
+        sp.innerSpillFile = spillFiles[currPart];
+        sp.innerSpilledBatches = partitionBatchesCount[currPart];
+        sp.cycleNum = cycleNum; // remember the current cycle
+        sp.origPartn = currPart; // for debugging / filename
+        sp.prevOrigPartn = originalPartition; // for debugging / filename
+        spilledPartitionsList.add(sp);
+
+        spilledInners[currPart] = sp; // for the outer to find the SP later
+        closeWriter(currPart, false);
+
+        partitionBatchesCount[currPart] = 0;
+        spillFiles[currPart] = null;
+
         continue;
       }
-
-      // each partition is a regular array of batches
-      ArrayList<VectorContainer> thisPart = new ArrayList<>();
 
       for (int curr = 0; curr < partitionBatchesCount[currPart]; curr++) {
         VectorContainer nextBatch = tmpBatchesList[currPart].get(curr);
@@ -749,8 +768,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
         thisPart.add(nextBatch);
       }
-
-      partitionContainers.add(thisPart);
     }
   }
 
@@ -857,6 +874,9 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     numPartitions = BaseAllocator.nextPowerOfTwo(numPartitions); // in case not a power of 2
     RECORDS_PER_BATCH = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_ROWS_IN_BATCH_VALIDATOR);
     buildSideIsEmpty = false;
+    operatorId = context.getHandle().getMajorFragmentId()
+      + "_"
+      + context.getHandle().getMinorFragmentId();
 
     this.allocator = oContext.getAllocator();
 
@@ -1012,7 +1032,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         vc.zeroVectors();
         return;
       }
-      String suffix = cycleNum > 0 ? side + "_" + Integer.toString(cycleNum) : side;
+      String suffix = cycleNum > 0 ? side + "_" + operatorId + "_" + Integer.toString(cycleNum) : side + "_" + operatorId;
       spillFiles[part] = spillSet.getNextSpillFile(suffix);
 
       try {

@@ -74,7 +74,7 @@ public class TestProbingAndPartitioningImpl {
 
     HashJoinMemoryCalculatorImpl.ProbingAndPartitioningImpl calc =
       new HashJoinMemoryCalculatorImpl.ProbingAndPartitioningImpl(
-        250,
+        290,
         15,
         60,
         20,
@@ -91,10 +91,64 @@ public class TestProbingAndPartitioningImpl {
 
     long expected = 60 // maxProbeBatchSize
       + 160 // in memory partitions
-      + 20; // max output batch size
+      + 20 // max output batch size
+      + 2 * 10 // Hash Table
+      + 2 * 10; // Hash join helper
     Assert.assertFalse(calc.shouldSpill());
     Assert.assertEquals(expected, calc.getConsumedMemory());
     Assert.assertNull(calc.next());
+  }
+
+  @Test
+  public void testProbingAndPartitioningBuildAllInMemorySpill() {
+    final Map<String, Long> keySizes = org.apache.drill.common.map.CaseInsensitiveMap.newHashMap();
+    final HashJoinMemoryCalculator.PartitionStatSet buildPartitionStatSet =
+      new HashJoinMemoryCalculator.PartitionStatSet(2);
+    final int recordsPerPartitionBatchBuild = 10;
+
+    addBatches(buildPartitionStatSet.get(0), recordsPerPartitionBatchBuild,
+      10, 4);
+    addBatches(buildPartitionStatSet.get(1), recordsPerPartitionBatchBuild,
+      10, 4);
+
+    final double fragmentationFactor = 2.0;
+    final double safetyFactor = 1.5;
+
+    HashJoinMemoryCalculatorImpl.ProbingAndPartitioningImpl calc =
+      new HashJoinMemoryCalculatorImpl.ProbingAndPartitioningImpl(
+        270,
+        15,
+        60,
+        20,
+        buildPartitionStatSet,
+        keySizes,
+        new MockHashTableSizeCalculator(10),
+        new MockHashJoinHelperSizeCalculator(10),
+        fragmentationFactor,
+        safetyFactor,
+        .75,
+        false);
+
+    calc.initialize();
+
+    long expected = 60 // maxProbeBatchSize
+      + 160 // in memory partitions
+      + 20 // max output batch size
+      + 2 * 10 // Hash Table
+      + 2 * 10; // Hash join helper
+    Assert.assertTrue(calc.shouldSpill());
+    Assert.assertEquals(expected, calc.getConsumedMemory());
+    buildPartitionStatSet.get(0).spill();
+
+    expected = 60 // maxProbeBatchSize
+      + 80 // in memory partitions
+      + 20 // max output batch size
+      + 10 // Hash Table
+      + 10 // Hash join helper
+      + 15; // partition batch size
+    Assert.assertFalse(calc.shouldSpill());
+    Assert.assertEquals(expected, calc.getConsumedMemory());
+    Assert.assertNotNull(calc.next());
   }
 
   @Test

@@ -24,6 +24,7 @@ import org.apache.drill.exec.ExecConstants;
 import org.apache.drill.test.BaseTestQuery;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import java.io.BufferedWriter;
@@ -39,6 +40,7 @@ public class TestHashJoinAdvanced extends JoinTestBase {
   @BeforeClass
   public static void disableMergeJoin() throws Exception {
     dirTestWatcher.copyResourceToRoot(Paths.get("join", "empty_part"));
+    dirTestWatcher.copyResourceToRoot(Paths.get("join", "widestrings"));
     dirTestWatcher.copyFileToRoot(Paths.get("sample-data", "region.parquet"));
     dirTestWatcher.copyFileToRoot(Paths.get("sample-data", "nation.parquet"));
     test(DISABLE_MJ);
@@ -196,6 +198,18 @@ public class TestHashJoinAdvanced extends JoinTestBase {
     } finally {
       BaseTestQuery.resetSessionOption(ExecConstants.SLICE_TARGET);
     }
+  }
+
+  @Test
+  @Ignore
+  public void testWideStringSpilling() throws Exception {
+    testBuilder().sqlQuery("select count(*) as countCol from dfs.`join/widestrings` ws INNER JOIN " +
+      "(select str_null, max(tinyint_var) max_ti from dfs.`join/widestrings` group by str_null) sub on " +
+      "ws.tinyint_var = sub.max_ti")
+      .unOrdered()
+      .baselineColumns("countCol")
+      .baselineValues(837L)
+      .go();
   }
 
   @Test // DRILL-6089
