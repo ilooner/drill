@@ -26,7 +26,7 @@ import java.util.Map;
 import static org.apache.drill.exec.physical.impl.join.HashJoinMemoryCalculatorImpl.ProbingAndPartitioningImpl.computeValueVectorSize;
 
 public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
-  public static final double HASHTABLE_DOUBLING_FACTOR = 1.5;
+  public static final double HASHTABLE_DOUBLING_FACTOR = 2.0;
   private final int maxNumRecords;
 
   public HashTableSizeCalculatorImpl(int maxNumRecords) {

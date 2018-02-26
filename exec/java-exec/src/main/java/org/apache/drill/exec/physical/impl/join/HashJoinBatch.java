@@ -218,6 +218,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
   @Override
   public IterOutcome innerNext() {
+
+    System.out.println("Cycle num " + cycleNum);
     try {
       /* If we are here for the first time, execute the build phase of the
        * hash join and setup the run time generated class for the probe side
@@ -629,7 +631,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           currHVVectors[currPart].getMutator().set(pos, hashCode);   // store the hash value in the new column
 
           if ( pos + 1 == RECORDS_PER_BATCH ) {
-            if (canSpill && hasProbeData) {
+            if (canSpill && hasProbeData && firstDataBuild) {
               boolean isSpilled = isSpilled(currPart);
               boolean spill = isSpilled || buildCalc.addBatchToPartition(currPart, currentBatches[currPart]);
               completeAnInnerBatch(currPart, true, spill);
@@ -655,7 +657,10 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     if (!firstDataBuild) {
       // Incase we never recieved any build data still do the necessary setup
 
-      delayedSetup();
+      if (firstCycle) {
+        delayedSetup();
+      }
+
       initializeBuild();
       setupHashTable();
 
@@ -716,29 +721,31 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       ArrayList<VectorContainer> thisPart = new ArrayList<>();
       partitionContainers.add(thisPart);
 
-      if (isSpilled(currPart)) {
-        continue;
-      }
+      if (canSpill && hasProbeData && firstDataBuild) {
+        if (probeCalc.isSpilled(currPart)) {
+          continue;
+        }
 
-      if (canSpill && hasProbeData && firstDataBuild && probeCalc.shouldSpill()) {
-        spillAPartition(tmpBatchesList[currPart], currPart, "inner");
-        probeCalc.spill(currPart);
+        if (probeCalc.shouldSpill()) {
+          spillAPartition(tmpBatchesList[currPart], currPart, "inner");
+          probeCalc.spill(currPart);
 
-        HJSpilledPartition sp = new HJSpilledPartition();
-        sp.innerSpillFile = spillFiles[currPart];
-        sp.innerSpilledBatches = partitionBatchesCount[currPart];
-        sp.cycleNum = cycleNum; // remember the current cycle
-        sp.origPartn = currPart; // for debugging / filename
-        sp.prevOrigPartn = originalPartition; // for debugging / filename
-        spilledPartitionsList.add(sp);
+          HJSpilledPartition sp = new HJSpilledPartition();
+          sp.innerSpillFile = spillFiles[currPart];
+          sp.innerSpilledBatches = partitionBatchesCount[currPart];
+          sp.cycleNum = cycleNum; // remember the current cycle
+          sp.origPartn = currPart; // for debugging / filename
+          sp.prevOrigPartn = originalPartition; // for debugging / filename
+          spilledPartitionsList.add(sp);
 
-        spilledInners[currPart] = sp; // for the outer to find the SP later
-        closeWriter(currPart, false);
+          spilledInners[currPart] = sp; // for the outer to find the SP later
+          closeWriter(currPart, false);
 
-        partitionBatchesCount[currPart] = 0;
-        spillFiles[currPart] = null;
+          partitionBatchesCount[currPart] = 0;
+          spillFiles[currPart] = null;
 
-        continue;
+          continue;
+        }
       }
 
       for (int curr = 0; curr < partitionBatchesCount[currPart]; curr++) {
@@ -883,7 +890,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
     this.allocator = oContext.getAllocator();
 
-    final long memLimit = context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_MEMORY_VALIDATOR);
+    final long memLimit = 50000000;//context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_MEMORY_VALIDATOR);
 
     if (memLimit != 0) {
       allocator.setLimit(memLimit);

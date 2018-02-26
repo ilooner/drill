@@ -40,7 +40,7 @@ public class TestHashJoinAdvanced extends JoinTestBase {
   @BeforeClass
   public static void disableMergeJoin() throws Exception {
     dirTestWatcher.copyResourceToRoot(Paths.get("join", "empty_part"));
-    //dirTestWatcher.copyResourceToRoot(Paths.get("join", "widestrings"));
+    dirTestWatcher.copyResourceToRoot(Paths.get("join", "widestrings"));
     dirTestWatcher.copyFileToRoot(Paths.get("sample-data", "region.parquet"));
     dirTestWatcher.copyFileToRoot(Paths.get("sample-data", "nation.parquet"));
     test(DISABLE_MJ);
@@ -201,7 +201,7 @@ public class TestHashJoinAdvanced extends JoinTestBase {
   }
 
   @Test
-  @Ignore
+  //@Ignore
   public void testWideStringSpilling() throws Exception {
     testBuilder().sqlQuery("select count(*) as countCol from dfs.`join/widestrings` ws INNER JOIN " +
       "(select str_null, max(tinyint_var) max_ti from dfs.`join/widestrings` group by str_null) sub on " +

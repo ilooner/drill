@@ -121,6 +121,8 @@ public interface HashJoinMemoryCalculator extends HashJoinStateCalculator<HashJo
     boolean shouldSpill();
 
     void spill(int partitionIndex);
+
+    boolean isSpilled(int partitionIndex);
   }
 
   /**

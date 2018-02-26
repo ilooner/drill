@@ -41,7 +41,7 @@ import static org.apache.drill.exec.physical.impl.join.HashJoinState.INITIALIZIN
 public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
   public static final double FRAGMENTATION_FACTOR = 1.0 / SortMemoryManager.PAYLOAD_FROM_BUFFER;
-  public static final double SAFETY_FACTOR = 1.3;
+  public static final double SAFETY_FACTOR = 1.5;
 
   public BuildSidePartitioning next() {
     return new BuildSidePartitioningImpl(new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE),
@@ -630,7 +630,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         long hashTableSize = hashTableSizeCalculator.calculateSize(partitionStat, keySizes, loadFactor, safetyFactor, fragmentationFactor);
         long hashJoinHelperSize = hashJoinHelperSizeCalculator.calculateSize(partitionStat, fragmentationFactor);
 
-        consumedMemory += hashTableSize + hashTableSize;
+        consumedMemory += hashTableSize + hashJoinHelperSize;
       }
 
       return consumedMemory > memoryAvailable;
@@ -641,6 +641,13 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     {
       Preconditions.checkState(initialized);
       buildPartitionStatSet.get(partitionIndex).spill();
+    }
+
+    @Override
+    public boolean isSpilled(int partitionIndex)
+    {
+      Preconditions.checkState(initialized);
+      return buildPartitionStatSet.get(partitionIndex).isSpilled();
     }
 
     @Nullable
