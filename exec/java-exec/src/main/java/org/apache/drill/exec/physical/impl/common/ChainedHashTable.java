@@ -232,8 +232,7 @@ public class ChainedHashTable {
   }
 
   private void setupIsKeyMatchInternal(ClassGenerator<HashTable> cg, MappingSet incomingMapping, MappingSet htableMapping,
-      LogicalExpression[] keyExprs, List<Comparator> comparators, TypedFieldId[] htKeyFieldIds)
-      throws SchemaChangeException {
+      LogicalExpression[] keyExprs, List<Comparator> comparators, TypedFieldId[] htKeyFieldIds) {
     cg.setMappingSet(incomingMapping);
 
     if (keyExprs == null || keyExprs.length == 0) {
@@ -277,7 +276,7 @@ public class ChainedHashTable {
   }
 
   private void setupSetValue(ClassGenerator<HashTable> cg, LogicalExpression[] keyExprs,
-                             TypedFieldId[] htKeyFieldIds) throws SchemaChangeException {
+                             TypedFieldId[] htKeyFieldIds) {
 
     cg.setMappingSet(SetValueMapping);
 
