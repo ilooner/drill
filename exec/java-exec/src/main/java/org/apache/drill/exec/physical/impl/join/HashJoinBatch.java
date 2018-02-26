@@ -239,9 +239,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         }
 
         // Build the hash table, using the build side record batches.
-        if (!executeBuildPhase()) {
-          return IterOutcome.STOP;
-        }
+        executeBuildPhase();
         // Update the hash table related stats for the operator
         updateStats(this.hashTables);
         //
@@ -531,30 +529,23 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
    * @throws ClassTransformationException
    * @throws IOException
    */
-  public boolean executeBuildPhase() throws SchemaChangeException, ClassTransformationException, IOException {
+  public void executeBuildPhase() throws SchemaChangeException, ClassTransformationException, IOException {
     final HashJoinMemoryCalculator.BuildSidePartitioning buildCalc = new HashJoinMemoryCalculatorImpl().next();
     final boolean firstCycle = cycleNum == 0;
-
     boolean hasProbeData = true;
 
-    if ( rightUpstream == IterOutcome.NONE ) {
-      return true;
-    } // empty right
+    if ( rightUpstream == IterOutcome.NONE ) { return; } // empty right
 
     boolean firstDataBuild = false;
     boolean moreData = true;
     while (moreData) {
       switch (rightUpstream) {
-      case NONE:
-        // We are done
-        moreData = false;
-        continue;
-      case OUT_OF_MEMORY:
-      case NOT_YET:
-        // Need to get the next outcome
-        continue;
-      case STOP:
-        return false;
+        case OUT_OF_MEMORY:
+        case NONE:
+        case NOT_YET:
+        case STOP:
+          moreData = false;
+          continue;
       case OK_NEW_SCHEMA:
         if (rightSchema == null) {
           rightSchema = buildBatch.getSchema();
@@ -588,9 +579,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
             } else {
               if (recordsToProcess == 0) {
                 // Sniff the first non empty batch
-                if (!executeProbePhase(true)) {
-                  return false;
-                }
+                executeProbePhase(true);
               }
 
               // If no non empty probe batch is found there is no probe data.
@@ -783,8 +772,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         thisPart.add(nextBatch);
       }
     }
-
-    return true;
   }
 
   private void setupOutputContainerSchema() {
@@ -1173,10 +1160,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           case NONE:
           case NOT_YET:
           case STOP:
-
-            if (sniff) {
-              return false;
-            }
             recordsProcessed = 0;
             recordsToProcess = 0;
             changeToFinalProbeState();
@@ -1310,7 +1293,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       }
     }
 
-    return true;
+    return false;
   }
 
   public int probeAndProject() throws SchemaChangeException {
