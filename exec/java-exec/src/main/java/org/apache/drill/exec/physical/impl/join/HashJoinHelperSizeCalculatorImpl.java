@@ -19,6 +19,7 @@ package org.apache.drill.exec.physical.impl.join;
 
 import com.google.common.base.Preconditions;
 import org.apache.drill.exec.record.RecordBatch;
+import org.apache.drill.exec.record.RecordBatchSizer;
 import org.apache.drill.exec.vector.IntVector;
 
 public class HashJoinHelperSizeCalculatorImpl implements HashJoinHelperSizeCalculator {
@@ -29,7 +30,7 @@ public class HashJoinHelperSizeCalculatorImpl implements HashJoinHelperSizeCalcu
   }
 
   @Override
-  public long calculateSize(HashJoinMemoryCalculator.PartitionStat partitionStat) {
+  public long calculateSize(HashJoinMemoryCalculator.PartitionStat partitionStat, double fragmentationFactor) {
     Preconditions.checkArgument(!partitionStat.isSpilled());
 
     // Account for the size of the SV4 in a hash join helper
@@ -45,6 +46,6 @@ public class HashJoinHelperSizeCalculatorImpl implements HashJoinHelperSizeCalcu
     // Note the BitSets of the HashJoin helper are stored on heap, so we don't account for them here.
     // TODO move BitSets to direct memory
 
-    return joinHelperSize;
+    return RecordBatchSizer.multiplyByFactor(joinHelperSize, fragmentationFactor);
   }
 }

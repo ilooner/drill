@@ -45,11 +45,10 @@ public class TestMergeJoinAdvanced extends JoinTestBase {
   private static File leftFile;
   private static File rightFile;
 
-
   @Rule
   public final TestRule TIMEOUT = TestTools.getTimeoutRule(120000); // Longer timeout than usual.
 
-  // Have to disable hash join to test merge join in this class
+// Have to disable hash join to test merge join in this class
   @BeforeClass
   public static void enableMergeJoin() throws Exception {
     test(DISABLE_HJ);
@@ -184,7 +183,7 @@ public class TestMergeJoinAdvanced extends JoinTestBase {
     testMultipleBatchJoin(5000l, 1000l, "right", 5000l*1000l + 3l);
   }
 
-  // Following tests can take some time.
+// Following tests can take some time.
   @Test
   @Ignore
   public void testMergeInnerJoinRandomized() throws Exception {

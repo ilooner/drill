@@ -38,7 +38,7 @@ public class TestHashJoinHelperSizeCalculatorImpl {
     partitionStat.add(new HashJoinMemoryCalculator.BatchStat(1000, 2000));
     partitionStat.add(new HashJoinMemoryCalculator.BatchStat(2500, 5000));
 
-    long actual = HashJoinHelperSizeCalculatorImpl.INSTANCE.calculateSize(partitionStat);
+    long actual = HashJoinHelperSizeCalculatorImpl.INSTANCE.calculateSize(partitionStat, 1.0);
     Assert.assertEquals(expected, actual);
   }
 }

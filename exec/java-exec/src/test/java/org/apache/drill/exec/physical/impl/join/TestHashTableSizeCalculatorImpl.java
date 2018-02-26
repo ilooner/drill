@@ -61,7 +61,7 @@ public class TestHashTableSizeCalculatorImpl {
       new HashJoinMemoryCalculator.BatchStat(maxNumRecords + 20, 1));
 
     final HashTableSizeCalculatorImpl calc = new HashTableSizeCalculatorImpl(maxNumRecords);
-    long actual = calc.calculateSize(partitionStat, keySizes, loadFactor, 1.0);
+    long actual = calc.calculateSize(partitionStat, keySizes, loadFactor, 1.0, 1.0);
 
     Assert.assertEquals(expected, actual);
   }

@@ -23,5 +23,6 @@ public interface HashTableSizeCalculator {
   long calculateSize(HashJoinMemoryCalculator.PartitionStat partitionStat,
                      Map<String, Long> keySizes,
                      double loadFactor,
-                     double safetyFactor);
+                     double safetyFactor,
+                     double fragmentationFactor);
 }

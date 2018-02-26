@@ -27,7 +27,6 @@ import java.io.PrintWriter;
 
 import org.apache.drill.exec.planner.physical.PlannerSettings;
 
-
 @Category(OperatorTest.class)
 public class JoinTestBase extends PlanTestBase {
 
@@ -64,10 +63,12 @@ public class JoinTestBase extends PlanTestBase {
   /**
    * This method runs a join query with one of the table generated as an
    * empty json file.
-   * @param testDir in which the empty json file is generated.
-   * @param joinType to be executed.
+   *
+   * @param testDir     in which the empty json file is generated.
+   * @param joinType    to be executed.
    * @param joinPattern to look for the pattern in the successful run.
-   * @param result number of the output rows.
+   * @param result      number of the output rows.
+   * @throws Exception the exception
    */
   public void testJoinWithEmptyFile(File testDir, String joinType,
                          String[] joinPattern, long result) throws Exception {
@@ -92,8 +93,9 @@ public class JoinTestBase extends PlanTestBase {
 
   /**
    * Allows to enable necessary join operator.
-   * @param hj hash join operator
-   * @param mj merge join operator
+   *
+   * @param hj  hash join operator
+   * @param mj  merge join operator
    * @param nlj nested-loop join operator
    * @throws Exception If any exception is obtained, all set options should be reset
    */

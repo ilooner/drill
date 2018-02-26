@@ -18,5 +18,5 @@
 package org.apache.drill.exec.physical.impl.join;
 
 public interface HashJoinHelperSizeCalculator {
-  long calculateSize(HashJoinMemoryCalculator.PartitionStat partitionStat);
+  long calculateSize(HashJoinMemoryCalculator.PartitionStat partitionStat, double fragmentationFactor);
 }

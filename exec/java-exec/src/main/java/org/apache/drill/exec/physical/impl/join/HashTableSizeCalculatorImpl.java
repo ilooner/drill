@@ -37,7 +37,8 @@ public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
   public long calculateSize(final HashJoinMemoryCalculator.PartitionStat partitionStat,
                             final Map<String, Long> keySizes,
                             final double loadFactor,
-                            final double safetyFactor) {
+                            final double safetyFactor,
+                            final double fragmentationFactor) {
     Preconditions.checkArgument(!keySizes.isEmpty());
     Preconditions.checkArgument(!partitionStat.isSpilled());
     Preconditions.checkArgument(partitionStat.getNumInMemoryRecords() > 0);
@@ -64,7 +65,7 @@ public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
       hashTableSize += computeVectorSizes(keySizes, partialNumEntries, safetyFactor);
     }
 
-    return RecordBatchSizer.multiplyByFactor(hashTableSize, HASHTABLE_DOUBLING_FACTOR);
+    return RecordBatchSizer.multiplyByFactors(hashTableSize, HASHTABLE_DOUBLING_FACTOR, fragmentationFactor);
   }
 
   public static long computeVectorSizes(final Map<String, Long> vectorSizes,

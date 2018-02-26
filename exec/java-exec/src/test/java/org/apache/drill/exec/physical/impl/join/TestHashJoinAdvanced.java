@@ -36,11 +36,11 @@ import java.util.regex.Pattern;
 @Category(OperatorTest.class)
 public class TestHashJoinAdvanced extends JoinTestBase {
 
-  // Have to disable merge join, if this testcase is to test "HASH-JOIN".
+// Have to disable merge join, if this testcase is to test "HASH-JOIN".
   @BeforeClass
   public static void disableMergeJoin() throws Exception {
     dirTestWatcher.copyResourceToRoot(Paths.get("join", "empty_part"));
-    dirTestWatcher.copyResourceToRoot(Paths.get("join", "widestrings"));
+    //dirTestWatcher.copyResourceToRoot(Paths.get("join", "widestrings"));
     dirTestWatcher.copyFileToRoot(Paths.get("sample-data", "region.parquet"));
     dirTestWatcher.copyFileToRoot(Paths.get("sample-data", "nation.parquet"));
     test(DISABLE_MJ);
