@@ -20,6 +20,8 @@ package org.apache.drill.exec;
 import org.apache.drill.exec.physical.impl.common.HashTable;
 import org.apache.drill.exec.rpc.user.InboundImpersonationManager;
 import org.apache.drill.exec.server.options.OptionValidator;
+import org.apache.drill.exec.server.options.TypeValidators.AdminUserGroupsValidator;
+import org.apache.drill.exec.server.options.TypeValidators.AdminUsersValidator;
 import org.apache.drill.exec.server.options.TypeValidators.BooleanValidator;
 import org.apache.drill.exec.server.options.TypeValidators.DoubleValidator;
 import org.apache.drill.exec.server.options.TypeValidators.EnumeratedStringValidator;
@@ -30,8 +32,6 @@ import org.apache.drill.exec.server.options.TypeValidators.PowerOfTwoLongValidat
 import org.apache.drill.exec.server.options.TypeValidators.RangeDoubleValidator;
 import org.apache.drill.exec.server.options.TypeValidators.RangeLongValidator;
 import org.apache.drill.exec.server.options.TypeValidators.StringValidator;
-import org.apache.drill.exec.server.options.TypeValidators.AdminUsersValidator;
-import org.apache.drill.exec.server.options.TypeValidators.AdminUserGroupsValidator;
 import org.apache.drill.exec.testing.ExecutionControls;
 
 public final class ExecConstants {
@@ -278,6 +278,12 @@ public final class ExecConstants {
   // Controls whether to enable bulk parquet reader processing
   public static final String PARQUET_FLAT_READER_BULK                    = "store.parquet.flat.reader.bulk";
   public static final OptionValidator PARQUET_FLAT_READER_BULK_VALIDATOR = new BooleanValidator(PARQUET_FLAT_READER_BULK);
+
+  // Controls the flat parquet reader batching constraints (number of record and memory limit)
+  public static final String PARQUET_FLAT_BATCH_NUM_RECORDS                    = "store.parquet.flat.batch.num_records";
+  public static final OptionValidator PARQUET_FLAT_BATCH_NUM_RECORDS_VALIDATOR = new RangeLongValidator(PARQUET_FLAT_BATCH_NUM_RECORDS, 1, Integer.MAX_VALUE);
+  public static final String PARQUET_FLAT_BATCH_MEMORY_SZ                      = "store.parquet.flat.batch.memory_sz";
+  public static final OptionValidator PARQUET_FLAT_BATCH_MEMORY_SZ_VALIDATOR   = new RangeLongValidator(PARQUET_FLAT_BATCH_MEMORY_SZ, 128 * 1024, Integer.MAX_VALUE);
 
   public static final String JSON_ALL_TEXT_MODE = "store.json.all_text_mode";
   public static final BooleanValidator JSON_READER_ALL_TEXT_MODE_VALIDATOR = new BooleanValidator(JSON_ALL_TEXT_MODE);
@@ -651,5 +657,14 @@ public final class ExecConstants {
   public static final String GRACE_PERIOD = "drill.exec.grace_period_ms";
 
   public static final String DRILL_PORT_HUNT = "drill.exec.port_hunt";
+
+  /** Enables batch size statistics logging */
+  public static final String STATS_LOGGING_BATCH_SZ_OPTION              = "drill.exec.stats.logging.batch_sz";
+  public static final BooleanValidator STATS_LOGGING_BATCH_SZ_VALIDATOR = new BooleanValidator(STATS_LOGGING_BATCH_SZ_OPTION);
+
+  /** Enables fine-grained batch size statistics logging */
+  public static final String STATS_LOGGING_FG_BATCH_SZ_OPTION              = "drill.exec.stats.logging.fine_grained.batch_sz";
+  public static final BooleanValidator STATS_LOGGING_BATCH_FG_SZ_VALIDATOR = new BooleanValidator(STATS_LOGGING_FG_BATCH_SZ_OPTION);
+
 
 }

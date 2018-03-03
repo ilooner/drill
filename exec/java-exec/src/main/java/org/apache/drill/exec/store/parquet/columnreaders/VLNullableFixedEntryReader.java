@@ -21,18 +21,20 @@ import java.nio.ByteBuffer;
 
 import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.ColumnPrecisionInfo;
 import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.PageDataInfo;
+import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.VLColumnBulkInputCallback;
 import org.apache.drill.exec.util.MemoryUtils;
 import org.apache.parquet.column.values.ValuesReader;
 
 /** Handles nullable fixed data types that have been erroneously tagged as Variable Length. */
-final class VLNullableFixedEntryReader extends VLAbstractEntryReader {
+final class VLNullableFixedEntryReader extends VLAbstractPageEntryReader {
 
   VLNullableFixedEntryReader(ByteBuffer _buffer,
       PageDataInfo _pageInfo,
       ColumnPrecisionInfo _columnPrecInfo,
-      VLColumnBulkEntry _entry) {
+      VLColumnBulkEntry _entry,
+      VLColumnBulkInputCallback _containerCallback) {
 
-    super(_buffer, _pageInfo, _columnPrecInfo, _entry);
+    super(_buffer, _pageInfo, _columnPrecInfo, _entry, _containerCallback);
   }
 
   /** {@inheritDoc} */

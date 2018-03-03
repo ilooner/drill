@@ -19,21 +19,20 @@ package org.apache.drill.exec.store.parquet.columnreaders;
 
 import java.nio.ByteBuffer;
 
-import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.ColumnPrecisionInfo;
-import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.PageDataInfo;
+import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.VLColumnBulkInputCallback;
 import org.apache.drill.exec.util.MemoryUtils;
 
-/** Abstract class for sub-classes implementing several algorithms for loading a Bulk Entry */
+/** Abstract class for sub-classes implementing several strategies for loading a Bulk Entry from a Parquet page
+ * or batch overflow data.
+ * */
 abstract class VLAbstractEntryReader {
 
   /** byte buffer used for buffering page data */
   protected final ByteBuffer buffer;
-  /** Page Data Information */
-  protected final PageDataInfo pageInfo;
-  /** expected precision type: fixed or variable length */
-  protected final ColumnPrecisionInfo columnPrecInfo;
   /** Bulk entry */
   protected final VLColumnBulkEntry entry;
+  /** A callback to allow bulk readers interact with their container */
+  private final VLColumnBulkInputCallback containerCallback;
 
   /**
    * CTOR.
@@ -43,14 +42,12 @@ abstract class VLAbstractEntryReader {
    * @param _entry reusable bulk entry object
    */
   VLAbstractEntryReader(ByteBuffer _buffer,
-    PageDataInfo _pageInfo,
-    ColumnPrecisionInfo _columnPrecInfo,
-    VLColumnBulkEntry _entry) {
+    VLColumnBulkEntry _entry,
+    VLColumnBulkInputCallback _containerCallback) {
 
-    this.buffer         = _buffer;
-    this.pageInfo       = _pageInfo;
-    this.columnPrecInfo = _columnPrecInfo;
-    this.entry          = _entry;
+    this.buffer            = _buffer;
+    this.entry             = _entry;
+    this.containerCallback = _containerCallback;
   }
 
   /**
@@ -60,52 +57,14 @@ abstract class VLAbstractEntryReader {
   abstract VLColumnBulkEntry getEntry(int valsToReadWithinPage);
 
   /**
-   * Indicates whether to use bulk processing
+   * @param newBitsMemory new "bits" memory size
+   * @param newOffsetsMemory new "offsets" memory size
+   * @param newDataMemory new "data" memory size
+   * @return true if the new payload ("bits", "offsets", "data") will trigger a constraint violation; false
+   *         otherwise
    */
-  protected final boolean bulkProcess() {
-    return columnPrecInfo.bulkProcess;
-  }
-
-  /**
-   * Loads new data into the buffer if empty or the force flag is set.
-   *
-   * @param force flag to force loading new data into the buffer
-   */
-  protected final boolean load(boolean force) {
-
-    if (!force && buffer.hasRemaining()) {
-      return true; // NOOP
-    }
-
-    // We're here either because the buffer is empty or we want to force a new load operation.
-    // In the case of force, there might be unprocessed data (still in the buffer) which is fine
-    // since the caller updates the page data buffer's offset only for the data it has consumed; this
-    // means unread data will be loaded again but this time will be positioned in the beginning of the
-    // buffer. This can happen only for the last entry in the buffer when either of its length or value
-    // is incomplete.
-    buffer.clear();
-
-    int remaining = remainingPageData();
-    int toCopy    = remaining > buffer.capacity() ? buffer.capacity() : remaining;
-
-    if (toCopy == 0) {
-      return false;
-    }
-
-    pageInfo.pageData.getBytes(pageInfo.pageDataOff, buffer.array(), buffer.position(), toCopy);
-
-    buffer.limit(toCopy);
-
-    // At this point the buffer position is 0 and its limit set to the number of bytes copied.
-
-    return true;
-  }
-
-  /**
-   * @return remaining data in current page
-   */
-  protected final int remainingPageData() {
-    return pageInfo.pageDataLen - pageInfo.pageDataOff;
+  protected boolean batchMemoryConstraintsReached(int newBitsMemory, int newOffsetsMemory, int newDataMemory) {
+    return containerCallback.batchMemoryConstraintsReached(newBitsMemory, newOffsetsMemory, newDataMemory);
   }
 
   /**
@@ -113,7 +72,7 @@ abstract class VLAbstractEntryReader {
    * @param pos start position
    * @return an integer encoded as a low endian
    */
-  protected final int getInt(final byte[] buff, final int pos) {
+  static final int getInt(final byte[] buff, final int pos) {
     return MemoryUtils.getInt(buff, pos);
   }
 

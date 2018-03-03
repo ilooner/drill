@@ -24228,6 +24228,98 @@ public final class UserBitShared {
       "2\025.exec.shared.NamePart\022+\n\005child\030\003 \003(\0132\034" +
       ".exec.shared.SerializedField\022\023\n\013value_co" +
       "unt\030\004 \001(\005\022\027\n\017var_byte_length\030\005 \001(\005\022\025\n\rbu" +
+      "ffer_length\030\007 \001(\005\022\016\n\006is_dup\030\010 \001(\010\022\033\n\023log" +
+      "ical_value_count\030\t \001(\005\"7\n\nNodeStatus\022\017\n\007",
+      "node_id\030\001 \001(\005\022\030\n\020memory_footprint\030\002 \001(\003\"" +
+      "\263\002\n\013QueryResult\0228\n\013query_state\030\001 \001(\0162#.e" +
+      "xec.shared.QueryResult.QueryState\022&\n\010que" +
+      "ry_id\030\002 \001(\0132\024.exec.shared.QueryId\022(\n\005err" +
+      "or\030\003 \003(\0132\031.exec.shared.DrillPBError\"\227\001\n\n" +
+      "QueryState\022\014\n\010STARTING\020\000\022\013\n\007RUNNING\020\001\022\r\n" +
+      "\tCOMPLETED\020\002\022\014\n\010CANCELED\020\003\022\n\n\006FAILED\020\004\022\032" +
+      "\n\026CANCELLATION_REQUESTED\020\005\022\014\n\010ENQUEUED\020\006" +
+      "\022\r\n\tPREPARING\020\007\022\014\n\010PLANNING\020\010\"p\n\tQueryDa" +
+      "ta\022&\n\010query_id\030\001 \001(\0132\024.exec.shared.Query",
+      "Id\022\021\n\trow_count\030\002 \001(\005\022(\n\003def\030\003 \001(\0132\033.exe" +
+      "c.shared.RecordBatchDef\"\330\001\n\tQueryInfo\022\r\n" +
+      "\005query\030\001 \001(\t\022\r\n\005start\030\002 \001(\003\0222\n\005state\030\003 \001" +
+      "(\0162#.exec.shared.QueryResult.QueryState\022" +
+      "\017\n\004user\030\004 \001(\t:\001-\022\'\n\007foreman\030\005 \001(\0132\026.exec" +
+      ".DrillbitEndpoint\022\024\n\014options_json\030\006 \001(\t\022" +
+      "\022\n\ntotal_cost\030\007 \001(\001\022\025\n\nqueue_name\030\010 \001(\t:" +
+      "\001-\"\242\004\n\014QueryProfile\022 \n\002id\030\001 \001(\0132\024.exec.s" +
+      "hared.QueryId\022$\n\004type\030\002 \001(\0162\026.exec.share" +
+      "d.QueryType\022\r\n\005start\030\003 \001(\003\022\013\n\003end\030\004 \001(\003\022",
+      "\r\n\005query\030\005 \001(\t\022\014\n\004plan\030\006 \001(\t\022\'\n\007foreman\030" +
+      "\007 \001(\0132\026.exec.DrillbitEndpoint\0222\n\005state\030\010" +
+      " \001(\0162#.exec.shared.QueryResult.QueryStat" +
+      "e\022\027\n\017total_fragments\030\t \001(\005\022\032\n\022finished_f" +
+      "ragments\030\n \001(\005\022;\n\020fragment_profile\030\013 \003(\013" +
+      "2!.exec.shared.MajorFragmentProfile\022\017\n\004u" +
+      "ser\030\014 \001(\t:\001-\022\r\n\005error\030\r \001(\t\022\024\n\014verboseEr" +
+      "ror\030\016 \001(\t\022\020\n\010error_id\030\017 \001(\t\022\022\n\nerror_nod" +
+      "e\030\020 \001(\t\022\024\n\014options_json\030\021 \001(\t\022\017\n\007planEnd" +
+      "\030\022 \001(\003\022\024\n\014queueWaitEnd\030\023 \001(\003\022\022\n\ntotal_co",
+      "st\030\024 \001(\001\022\025\n\nqueue_name\030\025 \001(\t:\001-\"t\n\024Major" +
+      "FragmentProfile\022\031\n\021major_fragment_id\030\001 \001" +
+      "(\005\022A\n\026minor_fragment_profile\030\002 \003(\0132!.exe" +
+      "c.shared.MinorFragmentProfile\"\350\002\n\024MinorF" +
+      "ragmentProfile\022)\n\005state\030\001 \001(\0162\032.exec.sha" +
+      "red.FragmentState\022(\n\005error\030\002 \001(\0132\031.exec." +
+      "shared.DrillPBError\022\031\n\021minor_fragment_id" +
+      "\030\003 \001(\005\0226\n\020operator_profile\030\004 \003(\0132\034.exec." +
+      "shared.OperatorProfile\022\022\n\nstart_time\030\005 \001" +
+      "(\003\022\020\n\010end_time\030\006 \001(\003\022\023\n\013memory_used\030\007 \001(",
+      "\003\022\027\n\017max_memory_used\030\010 \001(\003\022(\n\010endpoint\030\t" +
+      " \001(\0132\026.exec.DrillbitEndpoint\022\023\n\013last_upd" +
+      "ate\030\n \001(\003\022\025\n\rlast_progress\030\013 \001(\003\"\377\001\n\017Ope" +
+      "ratorProfile\0221\n\rinput_profile\030\001 \003(\0132\032.ex" +
+      "ec.shared.StreamProfile\022\023\n\013operator_id\030\003" +
+      " \001(\005\022\025\n\roperator_type\030\004 \001(\005\022\023\n\013setup_nan" +
+      "os\030\005 \001(\003\022\025\n\rprocess_nanos\030\006 \001(\003\022#\n\033peak_" +
+      "local_memory_allocated\030\007 \001(\003\022(\n\006metric\030\010" +
+      " \003(\0132\030.exec.shared.MetricValue\022\022\n\nwait_n" +
+      "anos\030\t \001(\003\"B\n\rStreamProfile\022\017\n\007records\030\001",
+      " \001(\003\022\017\n\007batches\030\002 \001(\003\022\017\n\007schemas\030\003 \001(\003\"J" +
+      "\n\013MetricValue\022\021\n\tmetric_id\030\001 \001(\005\022\022\n\nlong" +
+      "_value\030\002 \001(\003\022\024\n\014double_value\030\003 \001(\001\")\n\010Re" +
+      "gistry\022\035\n\003jar\030\001 \003(\0132\020.exec.shared.Jar\"/\n" +
+      "\003Jar\022\014\n\004name\030\001 \001(\t\022\032\n\022function_signature" +
+      "\030\002 \003(\t\"W\n\013SaslMessage\022\021\n\tmechanism\030\001 \001(\t" +
+      "\022\014\n\004data\030\002 \001(\014\022\'\n\006status\030\003 \001(\0162\027.exec.sh" +
+      "ared.SaslStatus*5\n\nRpcChannel\022\017\n\013BIT_CON" +
+      "TROL\020\000\022\014\n\010BIT_DATA\020\001\022\010\n\004USER\020\002*V\n\tQueryT" +
+      "ype\022\007\n\003SQL\020\001\022\013\n\007LOGICAL\020\002\022\014\n\010PHYSICAL\020\003\022",
+      "\r\n\tEXECUTION\020\004\022\026\n\022PREPARED_STATEMENT\020\005*\207" +
+      "\001\n\rFragmentState\022\013\n\007SENDING\020\000\022\027\n\023AWAITIN" +
+      "G_ALLOCATION\020\001\022\013\n\007RUNNING\020\002\022\014\n\010FINISHED\020" +
+      "\003\022\r\n\tCANCELLED\020\004\022\n\n\006FAILED\020\005\022\032\n\026CANCELLA" +
+      "TION_REQUESTED\020\006*\307\006\n\020CoreOperatorType\022\021\n" +
+      "\rSINGLE_SENDER\020\000\022\024\n\020BROADCAST_SENDER\020\001\022\n" +
+      "\n\006FILTER\020\002\022\022\n\016HASH_AGGREGATE\020\003\022\r\n\tHASH_J" +
+      "OIN\020\004\022\016\n\nMERGE_JOIN\020\005\022\031\n\025HASH_PARTITION_" +
+      "SENDER\020\006\022\t\n\005LIMIT\020\007\022\024\n\020MERGING_RECEIVER\020" +
+      "\010\022\034\n\030ORDERED_PARTITION_SENDER\020\t\022\013\n\007PROJE",
+      "CT\020\n\022\026\n\022UNORDERED_RECEIVER\020\013\022\032\n\026RANGE_PA" +
+      "RTITION_SENDER\020\014\022\n\n\006SCREEN\020\r\022\034\n\030SELECTIO" +
+      "N_VECTOR_REMOVER\020\016\022\027\n\023STREAMING_AGGREGAT" +
+      "E\020\017\022\016\n\nTOP_N_SORT\020\020\022\021\n\rEXTERNAL_SORT\020\021\022\t" +
+      "\n\005TRACE\020\022\022\t\n\005UNION\020\023\022\014\n\010OLD_SORT\020\024\022\032\n\026PA" +
+      "RQUET_ROW_GROUP_SCAN\020\025\022\021\n\rHIVE_SUB_SCAN\020" +
+      "\026\022\025\n\021SYSTEM_TABLE_SCAN\020\027\022\021\n\rMOCK_SUB_SCA" +
+      "N\020\030\022\022\n\016PARQUET_WRITER\020\031\022\023\n\017DIRECT_SUB_SC" +
+      "AN\020\032\022\017\n\013TEXT_WRITER\020\033\022\021\n\rTEXT_SUB_SCAN\020\034" +
+      "\022\021\n\rJSON_SUB_SCAN\020\035\022\030\n\024INFO_SCHEMA_SUB_S",
+      "CAN\020\036\022\023\n\017COMPLEX_TO_JSON\020\037\022\025\n\021PRODUCER_C" +
+      "ONSUMER\020 \022\022\n\016HBASE_SUB_SCAN\020!\022\n\n\006WINDOW\020" +
+      "\"\022\024\n\020NESTED_LOOP_JOIN\020#\022\021\n\rAVRO_SUB_SCAN" +
+      "\020$\022\021\n\rPCAP_SUB_SCAN\020%\022\022\n\016KAFKA_SUB_SCAN\020" +
+      "&\022\021\n\rKUDU_SUB_SCAN\020\'\022\023\n\017MAPRDB_SUB_SCAN\020" +
+      "(\022\017\n\013ROWKEY_JOIN\020)*g\n\nSaslStatus\022\020\n\014SASL" +
+      "_UNKNOWN\020\000\022\016\n\nSASL_START\020\001\022\024\n\020SASL_IN_PR" +
+      "OGRESS\020\002\022\020\n\014SASL_SUCCESS\020\003\022\017\n\013SASL_FAILE" +
+      "D\020\004B.\n\033org.apache.drill.exec.protoB\rUser" +
+      "BitSharedH\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {

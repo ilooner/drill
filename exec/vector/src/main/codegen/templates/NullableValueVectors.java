@@ -67,7 +67,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     Arrays.fill(DEFINED_VALUES_ARRAY, (byte) 1);
   }
 
-  private final FieldReader reader          = new Nullable${minor.class}ReaderImpl(Nullable${minor.class}Vector.this);
+  private final FieldReader reader = new Nullable${minor.class}ReaderImpl(Nullable${minor.class}Vector.this);
   private final MaterializedField bitsField = MaterializedField.create("$bits$", Types.required(MinorType.UINT1));
 
   /**
@@ -81,13 +81,19 @@ public final class ${className} extends BaseDataValueVector implements <#if type
    * not set (null) and must be explicitly set (made not null).
    */
 
-  private final UInt1Vector bits     = new UInt1Vector(bitsField, allocator);
-  private final ${valuesName} values;
-  private final Mutator mutator      = new MutatorImpl();
-  private final Accessor accessor    = new AccessorImpl();
+  private final UInt1Vector bits = new UInt1Vector(bitsField, allocator);
+
+  /**
+   * The values vector has same name as Nullable vector name, and has the same type and attributes
+   * as the nullable vector. This ensures that things like scale and precision are preserved in the values vector.
+   */
+  private final ${valuesName} values = new ${minor.class}Vector(field, allocator);
+
+  private final Mutator mutator   = new MutatorImpl();
+  private final Accessor accessor = new AccessorImpl();
 
   <#if type.major == "VarLen" && minor.class == "VarChar">
-  private final Mutator dupMutator   = new DupValsOnlyMutator();
+  private final Mutator dupMutator = new DupValsOnlyMutator();
   /** Accessor instance for duplicate values vector */
   private final Accessor dupAccessor = new DupValsOnlyAccessor();
   /** Delegator accessor (useful if caller is planning to cache the accessor) */
@@ -125,7 +131,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
 
   /** {@inheritDoc} */
   @Override
-  public int getValueCapacity(){
+  public int getValueCapacity() {
     if (!isDuplicateValsOnly()) {
     return Math.min(bits.getValueCapacity(), values.getValueCapacity());
   }
@@ -212,8 +218,9 @@ public final class ${className} extends BaseDataValueVector implements <#if type
       setInitialCapacity(from.logicalValueCapacity);
     }
 
-      if (!fromAccessor.isNull(fromIndex)) {
+    if (!fromAccessor.isNull(fromIndex)) {
       fromIndex = !from.isDuplicateValsOnly() ? fromIndex : 0;
+      thisIndex = !isDuplicateValsOnly() ? thisIndex : 0;
       mutator.fillEmpties(thisIndex);
       bits.copyFrom(fromIndex, thisIndex, from.bits);
       values.copyFrom(fromIndex, thisIndex, from.values);
@@ -232,19 +239,20 @@ public final class ${className} extends BaseDataValueVector implements <#if type
   public void copyFromSafe(int fromIndex, int thisIndex, Nullable${minor.class}Vector from) {
     if (isDuplicateValsOnly()) {
       // We currently don't have a use-case where a target dup-vector is provisioned by a non-dup source vector
-      assert isDuplicateValsOnly() == from.isDuplicateValsOnly();
+      assert from.isDuplicateValsOnly();
 
       if (logicalNumValues == from.logicalNumValues) {
         return; // noop as we only need to copy one entry
       }
       getMutator().setValueCount(from.logicalNumValues);
       setInitialCapacity(from.logicalValueCapacity);
-      }
+    }
+
     fromIndex = !from.isDuplicateValsOnly() ? fromIndex : 0;
     mutator.fillEmpties(thisIndex);
     bits.copyFromSafe(fromIndex, thisIndex, from.bits);
     values.copyFromSafe(fromIndex, thisIndex, from.values);
-    }
+  }
 
   /** {@inheritDoc} */
   @Override
@@ -253,13 +261,20 @@ public final class ${className} extends BaseDataValueVector implements <#if type
       mutator.fillEmpties(toIndex);
 
       // Handle the case of not-nullable copied into a nullable
-      if (from instanceof ${minor.class}Vector) {
+      if (from instanceof VarCharVector) {
         bits.getMutator().set(toIndex,1);
         values.copyFromSafe(fromIndex,toIndex,(${minor.class}Vector)from);
         return;
       }
 
-      Nullable${minor.class}Vector fromVector = (Nullable${minor.class}Vector) from;
+      NullableVarCharVector fromVector = (NullableVarCharVector) from;
+
+      if (fromVector.isDuplicateValsOnly()) {
+        // We need to normalize the from index (internally there is only
+        // one physical value stored)
+        fromIndex = 0;
+      }
+
       // This method is to be called only for loading the vector
       // sequentially, so there should be no empties to fill.
       bits.copyFromSafe(fromIndex, toIndex, fromVector.bits);
@@ -287,8 +302,8 @@ public final class ${className} extends BaseDataValueVector implements <#if type
   public SerializedField.Builder getMetadataBuilder() {
     if (!isDuplicateValsOnly()) {
       return super.getMetadataBuilder()
-          .addChild(bits.getMetadata())
-          .addChild(values.getMetadata());
+        .addChild(bits.getMetadata())
+        .addChild(values.getMetadata());
     } else {
       return super.getMetadataBuilder()
         .setIsDup(true)
@@ -296,7 +311,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
         .addChild(bits.getMetadata())
         .addChild(values.getMetadata());
     }
-  }
+      }
 
   /** {@inheritDoc} */
   @Override
@@ -356,7 +371,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
 
   /** {@inheritDoc} */
   @Override
-  public int getValueCapacity(){
+  public int getValueCapacity() {
     return Math.min(bits.getValueCapacity(), values.getValueCapacity());
   }
 
@@ -390,7 +405,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
   public void setInitialCapacity(int numRecords) {
     bits.setInitialCapacity(numRecords);
     values.setInitialCapacity(numRecords);
-    }
+  }
 
   /** {@inheritDoc} */
   @Override
@@ -431,14 +446,14 @@ public final class ${className} extends BaseDataValueVector implements <#if type
   @Override
   public void copyEntry(int toIndex, ValueVector from, int fromIndex) {
   <#if type.major == "VarLen">
-  	mutator.fillEmpties(toIndex);
+    mutator.fillEmpties(toIndex);
   </#if>
 
     // Handle the case of not-nullable copied into a nullable
     if (from instanceof ${minor.class}Vector) {
       bits.getMutator().set(toIndex,1);
-	  values.copyFromSafe(fromIndex,toIndex,(${minor.class}Vector)from);
-	  return;
+    values.copyFromSafe(fromIndex,toIndex,(${minor.class}Vector)from);
+    return;
     }
 
     Nullable${minor.class}Vector fromVector = (Nullable${minor.class}Vector) from;
@@ -495,21 +510,11 @@ public final class ${className} extends BaseDataValueVector implements <#if type
   public ${className}(MaterializedField field, BufferAllocator allocator) {
     super(field, allocator);
 
-    // The values vector has its own name, and has the same type and attributes
-    // as the nullable vector. This ensures that
-    // things like scale and precision are preserved in the values vector.
-
-    values = new ${minor.class}Vector(
-      MaterializedField.create(VALUES_VECTOR_NAME, field.getType()),
-      allocator);
-
-    field.addChild(bits.getField());
-    field.addChild(values.getField());
   }
 
   /** {@inheritDoc} */
   @Override
-  public FieldReader getReader(){
+  public FieldReader getReader() {
     return reader;
   }
 
@@ -524,17 +529,17 @@ public final class ${className} extends BaseDataValueVector implements <#if type
       clear();
     }
     return buffers;
-  }
+    }
 
   /** {@inheritDoc} */
   @Override
-  public int getBufferSize(){
+  public int getBufferSize() {
     return values.getBufferSize() + bits.getBufferSize();
   }
 
   /** {@inheritDoc} */
   @Override
-  public int getAllocatedSize(){
+  public int getAllocatedSize() {
     return bits.getAllocatedSize() + values.getAllocatedSize();
   }
 
@@ -561,7 +566,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
   /** {@inheritDoc} */
   @Override
   public void allocateNew() {
-    if(!allocateNewSafe()){
+    if(!allocateNewSafe()) {
       throw new OutOfMemoryException("Failure while allocating buffer.");
     }
   }
@@ -628,13 +633,13 @@ public final class ${className} extends BaseDataValueVector implements <#if type
 
   /** {@inheritDoc} */
   @Override
-  public int getByteCapacity(){
+  public int getByteCapacity() {
     return values.getByteCapacity();
   }
 
   /** {@inheritDoc} */
   @Override
-  public int getCurrentSizeInBytes(){
+  public int getCurrentSizeInBytes() {
     return values.getCurrentSizeInBytes();
   }
 
@@ -669,17 +674,24 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     bits.zeroVector();
     values.zeroVector();
   }
+
+  @Override
+  public void toNullable(ValueVector nullableVector) {
+    exchange(nullableVector);
+    clear();
+  }
+
   </#if>
 
   /** {@inheritDoc} */
   @Override
-  public TransferPair getTransferPair(BufferAllocator allocator){
+  public TransferPair getTransferPair(BufferAllocator allocator) {
     return new TransferImpl(getField(), allocator);
   }
 
   /** {@inheritDoc} */
   @Override
-  public TransferPair getTransferPair(String ref, BufferAllocator allocator){
+  public TransferPair getTransferPair(String ref, BufferAllocator allocator) {
     return new TransferImpl(getField().withPath(ref), allocator);
   }
 
@@ -689,7 +701,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     return new TransferImpl((Nullable${minor.class}Vector) to);
   }
 
-  public void transferTo(Nullable${minor.class}Vector target){
+  public void transferTo(Nullable${minor.class}Vector target) {
     <#if type.major == "VarLen" && minor.class == "VarChar">
     if (isDuplicateValsOnly() && logicalNumValues > 0) {
       if (!target.isDuplicateValsOnly()) {
@@ -726,7 +738,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     </#if>
   }
 
-  public ${minor.class}Vector convertToRequiredVector(){
+  public ${minor.class}Vector convertToRequiredVector() {
     ${minor.class}Vector v = new ${minor.class}Vector(getField().getOtherNullableVersion(), allocator);
     if (v.data != null) {
       v.data.release(1);
@@ -737,6 +749,13 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     return v;
   }
 
+  /**
+   * @return Underlying "bits" vector value capacity
+   */
+  public int getBitsValueCapacity() {
+    return bits.getValueCapacity();
+  }
+
 // ----------------------------------------------------------------------------
 // Transfer inner class
 // ----------------------------------------------------------------------------
@@ -744,7 +763,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
   private class TransferImpl implements TransferPair {
     private final Nullable${minor.class}Vector to;
 
-    public TransferImpl(MaterializedField field, BufferAllocator allocator){
+    public TransferImpl(MaterializedField field, BufferAllocator allocator) {
       to = new Nullable${minor.class}Vector(field, allocator);
       <#if type.major == "VarLen" && minor.class == "VarChar">
       if (isDuplicateValsOnly() && logicalNumValues > 0) {
@@ -753,7 +772,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
       </#if>
     }
 
-    public TransferImpl(Nullable${minor.class}Vector to){
+    public TransferImpl(Nullable${minor.class}Vector to) {
       this.to = to;
       <#if type.major == "VarLen" && minor.class == "VarChar">
       if (isDuplicateValsOnly() && logicalNumValues > 0) {
@@ -763,12 +782,12 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     }
 
     @Override
-    public Nullable${minor.class}Vector getTo(){
+    public Nullable${minor.class}Vector getTo() {
       return to;
     }
 
     @Override
-    public void transfer(){
+    public void transfer() {
       transferTo(to);
     }
 
@@ -832,12 +851,12 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     }
 
     /** {@inheritDoc} */
-    public int isSet(int index){
+    public int isSet(int index) {
       return bAccessor.get(index);
     }
     <#if type.major == "VarLen">
     /** {@inheritDoc} */
-    public long getStartEnd(int index){
+    public long getStartEnd(int index) {
       return vAccessor.getStartEnd(index);
     }
 
@@ -848,7 +867,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     }
     </#if>
     /** {@inheritDoc} */
-    public void get(int index, Nullable${minor.class}Holder holder){
+    public void get(int index, Nullable${minor.class}Holder holder) {
       vAccessor.get(index, holder);
       holder.isSet = bAccessor.get(index);
 
@@ -862,8 +881,8 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     @Override
     public ${friendlyType} getObject(int index) {
       if (isNull(index)) {
-          return null;
-      }else{
+        return null;
+      } else {
         return vAccessor.getObject(index);
       }
     }
@@ -871,8 +890,8 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     /** {@inheritDoc} */
     public StringBuilder getAsStringBuilder(int index) {
       if (isNull(index)) {
-          return null;
-      }else{
+        return null;
+      } else {
         return vAccessor.getAsStringBuilder(index);
       }
     }
@@ -911,7 +930,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     }
 
     /** {@inheritDoc} */
-    public long getStartEnd(int index){
+    public long getStartEnd(int index) {
       chkIndex(index);
       return vAccessor.getStartEnd(0);
     }
@@ -949,7 +968,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     private void chkIndex(int index) {
       if (index >= logicalNumValues) {
         throw new IndexOutOfBoundsException(String.format("Index [%d], number of values [%d]", index, logicalNumValues));
-    }
+      }
     }
   }
 
@@ -975,9 +994,9 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     }
 
     /** {@inheritDoc} */
-    public long getStartEnd(int index){
+    public long getStartEnd(int index) {
       return getCurrentAccessor().getStartEnd(index);
-    }
+  }
 
     /** {@inheritDoc} */
     @Override
@@ -1008,7 +1027,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
       }
       return dupAccessor;
     }
-  }
+    }
   </#if>
 
 //-----------------------------------------------------------------------------
@@ -1069,13 +1088,13 @@ public final class ${className} extends BaseDataValueVector implements <#if type
      private MutatorImpl() { super(); }
 
     /** {@inheritDoc} */
-    public ${valuesName} getVectorWithValues(){
+    public ${valuesName} getVectorWithValues() {
       return values;
     }
 
     /** {@inheritDoc} */
     @Override
-    public void setIndexDefined(int index){
+    public void setIndexDefined(int index) {
       bits.getMutator().set(index, 1);
     }
 
@@ -1220,32 +1239,32 @@ public final class ${className} extends BaseDataValueVector implements <#if type
       values.getMutator().setSafe(index<#list fields as field><#if field.include!true >, ${field.name}Field</#if></#list>);
       setCount++;
       <#if type.major == "VarLen">lastSet = index;</#if>
-   }
+    }
 
-   /** {@inheritDoc} */
-   public void setSafe(int index, Nullable${minor.class}Holder value) {
-   <#if type.major == "VarLen">
-     if (index > lastSet + 1) {
-       fillEmpties(index);
-     }
-   </#if>
-     bits.getMutator().setSafe(index, value.isSet);
-     values.getMutator().setSafe(index, value);
-     setCount++;
-    <#if type.major == "VarLen">lastSet = index;</#if>
-   }
+    /** {@inheritDoc} */
+    public void setSafe(int index, Nullable${minor.class}Holder value) {
+      <#if type.major == "VarLen">
+      if (index > lastSet + 1) {
+        fillEmpties(index);
+      }
+      </#if>
+      bits.getMutator().setSafe(index, value.isSet);
+      values.getMutator().setSafe(index, value);
+      setCount++;
+      <#if type.major == "VarLen">lastSet = index;</#if>
+    }
 
-   /** {@inheritDoc} */
-   public void setSafe(int index, ${minor.class}Holder value) {
-     <#if type.major == "VarLen">
-     if (index > lastSet + 1) {
-       fillEmpties(index);
-     }
-     </#if>
-     bits.getMutator().setSafe(index, 1);
-     values.getMutator().setSafe(index, value);
-     setCount++;
-     <#if type.major == "VarLen">lastSet = index;</#if>
+    /** {@inheritDoc} */
+    public void setSafe(int index, ${minor.class}Holder value) {
+      <#if type.major == "VarLen">
+      if (index > lastSet + 1) {
+        fillEmpties(index);
+      }
+      </#if>
+      bits.getMutator().setSafe(index, 1);
+      values.getMutator().setSafe(index, value);
+      setCount++;
+      <#if type.major == "VarLen">lastSet = index;</#if>
     }
 
     <#if !(type.major == "VarLen" || minor.class == "Decimal28Sparse" || minor.class == "Decimal38Sparse" || minor.class == "Decimal28Dense" || minor.class == "Decimal38Dense" || minor.class == "Interval" || minor.class == "IntervalDay")>
@@ -1299,7 +1318,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
       }
 
       /** {@inheritDoc} */
-    @Override
+      @Override
       public void onNewBulkEntry(final VLBulkEntry entry) {
         final int[] lengths       = entry.getValuesLength();
         final ByteBuffer buffer   = bitsMutator.getByteBuffer();
@@ -1311,7 +1330,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
 
         do {
           if (buffer.remaining() < 1) {
-              bitsMutator.flush();
+            bitsMutator.flush();
           }
 
           final int toCopy      = Math.min(remaining, buffer.remaining());
@@ -1332,7 +1351,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
             }
           } else { // Optimization when there are no nulls within this bulk entry
             for (int idx = startTgtPos; idx < maxTgtPos; idx++) {
-                buffer_array[idx] = 1;
+              buffer_array[idx] = 1;
             }
             setCount += toCopy;
           }
@@ -1353,7 +1372,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
       public void onEndBulkInput() {
         bitsMutator.flush();
       }
-    }
+    } // End of class
 
     /** {@inheritDoc} */
     public void setSafe(VLBulkInput<VLBulkEntry> input) {
@@ -1366,7 +1385,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     </#if>
     /** {@inheritDoc} */
     @Override
-    public void generateTestData(int valueCount){
+    public void generateTestData(int valueCount) {
       bits.getMutator().generateTestDataAlt(valueCount);
       values.getMutator().generateTestData(valueCount);
       <#if type.major = "VarLen">lastSet = valueCount;</#if>
@@ -1375,7 +1394,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
 
     /** {@inheritDoc} */
     @Override
-    public void reset(){
+    public void reset() {
       setCount = 0;
       <#if type.major = "VarLen">lastSet = -1;</#if>
     }
@@ -1397,14 +1416,14 @@ public final class ${className} extends BaseDataValueVector implements <#if type
       clear();
       final int valueCount = srce.getAccessor().getValueCount();
 
-       // Create a new bits vector, all values non-null
-       fillBitsVector(getBitsVector(), valueCount);
+      // Create a new bits vector, all values non-null
+      fillBitsVector(getBitsVector(), valueCount);
 
-       // Swap the data portion
-       getValuesVector().exchange(srce);
-       <#if type.major = "VarLen">lastSet = valueCount;</#if>
-       setValueCount(valueCount);
-      }
+      // Swap the data portion
+      getValuesVector().exchange(srce);
+      <#if type.major = "VarLen">lastSet = valueCount;</#if>
+      setValueCount(valueCount);
+    }
   }
 
   <#if type.major == "VarLen" && minor.class == "VarChar">
@@ -1413,7 +1432,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     private DupValsOnlyMutator() { super(); }
 
     /** {@inheritDoc} */
-    public ${valuesName} getVectorWithValues(){
+    public ${valuesName} getVectorWithValues() {
       throw new UnsupportedOperationException();
     }
 
@@ -1421,7 +1440,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     @Override
     public void setIndexDefined(int index) {
       if (index == 0) {
-      bits.getMutator().set(0, 1);
+        bits.getMutator().set(0, 1);
       } else {
         undoOptimization();
         getMutator().setIndexDefined(index);
@@ -1442,22 +1461,24 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     /** {@inheritDoc} */
     public void set(int index, byte[] value) {
       if (index == 0) {
-      setCount = 1;
-      final ${valuesName}.Mutator valuesMutator = values.getMutator();
-      final UInt1Vector.Mutator bitsMutator     = bits.getMutator();
-      bitsMutator.set(0, 1);
-      valuesMutator.set(0, value);
+        setCount = 1;
+        final ${valuesName}.Mutator valuesMutator = values.getMutator();
+        final UInt1Vector.Mutator bitsMutator     = bits.getMutator();
+        bitsMutator.set(0, 1);
+        valuesMutator.set(0, value);
+        lastSet = 0;
       } else {
         undoOptimization();
         getMutator().set(index, value);
-    }
+      }
     }
 
     /** {@inheritDoc} */
     @Override
     public void setValueLengthSafe(int index, int length) {
       if (index == 0) {
-      values.getMutator().setValueLengthSafe(0, length);
+        values.getMutator().setValueLengthSafe(0, length);
+        lastSet = 0;
       } else {
         undoOptimization();
         getMutator().setValueLengthSafe(index, length);
@@ -1467,9 +1488,10 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     /** {@inheritDoc} */
     public void setSafe(int index, byte[] value, int start, int length) {
       if (index == 0) {
-      bits.getMutator().setSafe(0, 1);
-      values.getMutator().setSafe(0, value, start, length);
-      setCount = 1;
+        bits.getMutator().setSafe(0, 1);
+        values.getMutator().setSafe(0, value, start, length);
+        setCount = 1;
+        lastSet  = 0;
       } else {
         undoOptimization();
         getMutator().setSafe(index, value, start, length);
@@ -1479,9 +1501,10 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     /** {@inheritDoc} */
     public void setSafe(int index, ByteBuffer value, int start, int length) {
       if (index == 0) {
-      bits.getMutator().setSafe(0, 1);
-      values.getMutator().setSafe(0, value, start, length);
-      setCount = 1;
+        bits.getMutator().setSafe(0, 1);
+        values.getMutator().setSafe(0, value, start, length);
+        setCount = 1;
+        lastSet  = 0;
       } else {
         undoOptimization();
         getMutator().setSafe(index, value, start, length);
@@ -1491,17 +1514,17 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     /** {@inheritDoc} */
     public void setNull(int index) {
       if (index == 0) {
-      bits.getMutator().setSafe(0, 0);
+        bits.getMutator().setSafe(0, 0);
       } else {
         undoOptimization();
         getMutator().setNull(index);
-    }
+      }
     }
 
     /** {@inheritDoc} */
     public void setSkipNull(int index, ${minor.class}Holder holder) {
       if (index == 0) {
-      values.getMutator().set(0, holder);
+        values.getMutator().set(0, holder);
       } else {
         undoOptimization();
         getMutator().setSkipNull(index, holder);
@@ -1511,7 +1534,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     /** {@inheritDoc} */
     public void setSkipNull(int index, Nullable${minor.class}Holder holder) {
       if (index == 0) {
-      values.getMutator().set(0, holder);
+        values.getMutator().set(0, holder);
       } else {
         undoOptimization();
         getMutator().setSkipNull(index, holder);
@@ -1521,21 +1544,23 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     /** {@inheritDoc} */
     public void set(int index, Nullable${minor.class}Holder holder) {
       if (index == 0) {
-      final ${valuesName}.Mutator valuesMutator = values.getMutator();
-      bits.getMutator().set(0, holder.isSet);
-      valuesMutator.set(0, holder);
+        final ${valuesName}.Mutator valuesMutator = values.getMutator();
+        bits.getMutator().set(0, holder.isSet);
+        valuesMutator.set(0, holder);
+        lastSet = 0;
       } else {
         undoOptimization();
         getMutator().set(index, holder);
-    }
+      }
     }
 
     /** {@inheritDoc} */
     public void set(int index, ${minor.class}Holder holder) {
       if (index == 0) {
-      final ${valuesName}.Mutator valuesMutator = values.getMutator();
-      bits.getMutator().set(0, 1);
-      valuesMutator.set(0, holder);
+        final ${valuesName}.Mutator valuesMutator = values.getMutator();
+        bits.getMutator().set(0, 1);
+        valuesMutator.set(0, holder);
+        lastSet = 0;
       } else {
         undoOptimization();
         getMutator().set(index, holder);
@@ -1554,6 +1579,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
       if (index == 0) {
         bits.getMutator().set(0, isSet);
         values.getMutator().set(0<#list fields as field><#if field.include!true >, ${field.name}Field</#if></#list>);
+        lastSet = 0;
       } else {
         undoOptimization();
         getMutator().set(index, isSet<#list fields as field><#if field.include!true >, ${field.name}Field</#if></#list>);
@@ -1565,6 +1591,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
       if (index == 0) {
         bits.getMutator().setSafe(0, isSet);
         values.getMutator().setSafe(0<#list fields as field><#if field.include!true >, ${field.name}Field</#if></#list>);
+        lastSet = 0;
       } else {
         undoOptimization();
         getMutator().setSafe(index, isSet<#list fields as field><#if field.include!true >, ${field.name}Field</#if></#list>);
@@ -1574,9 +1601,10 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     /** {@inheritDoc} */
     public void setSafe(int index, Nullable${minor.class}Holder value) {
       if (index == 0) {
-      bits.getMutator().setSafe(0, value.isSet);
-      values.getMutator().setSafe(0, value);
-      setCount = 1;
+        bits.getMutator().setSafe(0, value.isSet);
+        values.getMutator().setSafe(0, value);
+        setCount = 1;
+        lastSet  = 0;
       } else {
         undoOptimization();
         getMutator().setSafe(index, value);
@@ -1586,9 +1614,10 @@ public final class ${className} extends BaseDataValueVector implements <#if type
     /** {@inheritDoc} */
     public void setSafe(int index, ${minor.class}Holder value) {
       if (index == 0) {
-      bits.getMutator().setSafe(0, 1);
-      values.getMutator().setSafe(0, value);
-      setCount = 1;
+        bits.getMutator().setSafe(0, 1);
+        values.getMutator().setSafe(0, value);
+        setCount = 1;
+        lastSet  = 0;
       } else {
         undoOptimization();
         getMutator().setSafe(index, value);
@@ -1602,6 +1631,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
       logicalNumValues     = valueCount;
       logicalValueCapacity = valueCount;
 
+      fillEmpties(0);
       values.getMutator().setValueCount(valueCount > 0 ? 1 : 0);
       bits.getMutator().setValueCount(valueCount > 0 ? 1 : 0);
     }
@@ -1619,7 +1649,7 @@ public final class ${className} extends BaseDataValueVector implements <#if type
 
     /** {@inheritDoc} */
     @Override
-    public void reset(){
+    public void reset() {
       setCount         = 0;
       logicalNumValues = 0;
     }
@@ -1633,10 +1663,17 @@ public final class ${className} extends BaseDataValueVector implements <#if type
       throw new UnsupportedOperationException();
     }
 
-    protected void fillEmpties(int index) {}
+    protected void fillEmpties(int index) {
+      assert index == 0;
+      final ${valuesName}.Mutator valuesMutator = values.getMutator();
+      if (lastSet < 0) {
+        values.getMutator().setSafe(0, emptyByteArray);
+      }
+      lastSet = index;
+    }
 
     public void fromNotNullable(${minor.class}Vector srce) {
-    	  throw new UnsupportedOperationException();
+        throw new UnsupportedOperationException();
     }
   }
   </#if>

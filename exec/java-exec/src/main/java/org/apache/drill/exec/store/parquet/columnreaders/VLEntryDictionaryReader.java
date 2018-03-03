@@ -22,17 +22,19 @@ import java.nio.ByteBuffer;
 import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.ColumnPrecisionInfo;
 import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.DictionaryReaderWrapper;
 import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.PageDataInfo;
+import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.VLColumnBulkInputCallback;
 import org.apache.parquet.io.api.Binary;
 
 /** Handles variable data types using a dictionary */
-final class VLEntryDictionaryReader extends VLAbstractEntryReader {
+final class VLEntryDictionaryReader extends VLAbstractPageEntryReader {
 
   VLEntryDictionaryReader(ByteBuffer _buffer,
     PageDataInfo _pageInfo,
     ColumnPrecisionInfo _columnPrecInfo,
-    VLColumnBulkEntry _entry) {
+    VLColumnBulkEntry _entry,
+    VLColumnBulkInputCallback _containerCallback) {
 
-    super(_buffer, _pageInfo, _columnPrecInfo, _entry);
+    super(_buffer, _pageInfo, _columnPrecInfo, _entry, _containerCallback);
   }
 
   /** {@inheritDoc} */
@@ -97,6 +99,12 @@ final class VLEntryDictionaryReader extends VLAbstractEntryReader {
     final int[] valueLengths = entry.getValuesLength();
     final Binary currEntry   = valueReader.getEntry();
     final int dataLen        = currEntry.length();
+
+    // Is there enough memory to handle this large value?
+    if (batchMemoryConstraintsReached(0, 4, dataLen)) {
+      entry.set(0, 0, 0, 0); // no data to be consumed
+      return entry;
+    }
 
     // Set the value length
     valueLengths[0] = dataLen;

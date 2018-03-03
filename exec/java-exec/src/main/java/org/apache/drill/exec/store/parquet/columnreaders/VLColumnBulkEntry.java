@@ -48,6 +48,8 @@ final class VLColumnBulkEntry implements VLBulkEntry {
   private boolean arrayBacked;
   /** indicator on whether the current data buffer is externally or internally owned */
   private boolean internalDataBuf;
+  /** indicates whether the entry was read from the overflow data or page data */
+  private boolean readFromPage;
 
   VLColumnBulkEntry(ColumnPrecisionInfo columnPrecInfo) {
     this(columnPrecInfo, VLBulkPageReader.BUFF_SZ);
@@ -168,6 +170,20 @@ final class VLColumnBulkEntry implements VLBulkEntry {
 
   int getMaxEntries() {
     return lengths.length;
+  }
+
+  /**
+   * @return the readFromPage
+   */
+  boolean isReadFromPage() {
+    return readFromPage;
+  }
+
+  /**
+   * @param readFromPage the readFromPage to set
+   */
+  void setReadFromPage(boolean readFromPage) {
+    this.readFromPage = readFromPage;
   }
 
 }

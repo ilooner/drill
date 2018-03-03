@@ -17,8 +17,8 @@
  */
 package org.apache.drill.exec.record;
 
-import java.util.Set;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.drill.common.map.CaseInsensitiveMap;
 import org.apache.drill.common.types.TypeProtos.DataMode;
@@ -28,19 +28,20 @@ import org.apache.drill.exec.memory.AllocationManager.BufferLedger;
 import org.apache.drill.exec.memory.BaseAllocator;
 import org.apache.drill.exec.record.selection.SelectionVector2;
 import org.apache.drill.exec.vector.AllocationHelper;
+import org.apache.drill.exec.vector.NullableVarCharVector;
 import org.apache.drill.exec.vector.NullableVector;
 import org.apache.drill.exec.vector.UInt1Vector;
 import org.apache.drill.exec.vector.UInt4Vector;
 import org.apache.drill.exec.vector.UntypedNullVector;
 import org.apache.drill.exec.vector.ValueVector;
+import org.apache.drill.exec.vector.VariableWidthVector;
 import org.apache.drill.exec.vector.complex.AbstractMapVector;
 import org.apache.drill.exec.vector.complex.RepeatedListVector;
 import org.apache.drill.exec.vector.complex.RepeatedMapVector;
 import org.apache.drill.exec.vector.complex.RepeatedValueVector;
-import org.apache.drill.exec.vector.VariableWidthVector;
+import org.apache.drill.exec.vector.complex.RepeatedVariableWidthVectorLike;
 
 import com.google.common.collect.Sets;
-import org.apache.drill.exec.vector.complex.RepeatedVariableWidthVectorLike;
 
 /**
  * Given a record batch or vector container, determines the actual memory
@@ -343,7 +344,14 @@ public class RecordBatchSizer {
           // Calculate pure data size.
           if (isVariableWidth) {
             VariableWidthVector variableWidthVector = ((VariableWidthVector) ((NullableVector) v).getValuesVector());
-            totalDataSize = variableWidthVector.getOffsetVector().getAccessor().get(valueCount);
+
+            if (v instanceof NullableVarCharVector
+             && ((NullableVarCharVector) v).isDuplicateValsOnly()) {
+
+              totalDataSize = variableWidthVector.getOffsetVector().getAccessor().get(1);
+            } else {
+              totalDataSize = variableWidthVector.getOffsetVector().getAccessor().get(valueCount);
+            }
           } else {
             // Another special case.
             if (v instanceof UntypedNullVector) {

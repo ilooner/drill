@@ -21,17 +21,19 @@ import java.nio.ByteBuffer;
 
 import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.ColumnPrecisionInfo;
 import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.PageDataInfo;
+import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.VLColumnBulkInputCallback;
 import org.apache.drill.exec.util.MemoryUtils;
 
 /** Handles fixed data types that have been erroneously tagged as Variable Length. */
-final class VLFixedEntryReader extends VLAbstractEntryReader {
+final class VLFixedEntryReader extends VLAbstractPageEntryReader {
 
   VLFixedEntryReader(ByteBuffer _buffer,
     PageDataInfo _pageInfo,
     ColumnPrecisionInfo _columnPrecInfo,
-    VLColumnBulkEntry _entry) {
+    VLColumnBulkEntry _entry,
+    VLColumnBulkInputCallback _containerCallback) {
 
-    super(_buffer, _pageInfo, _columnPrecInfo, _entry);
+    super(_buffer, _pageInfo, _columnPrecInfo, _entry, _containerCallback);
   }
 
   /** {@inheritDoc} */

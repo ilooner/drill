@@ -22,17 +22,19 @@ import java.nio.ByteBuffer;
 import org.apache.drill.common.exceptions.DrillRuntimeException;
 import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.ColumnPrecisionInfo;
 import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.PageDataInfo;
+import org.apache.drill.exec.store.parquet.columnreaders.VLColumnBulkInput.VLColumnBulkInputCallback;
 import org.apache.drill.exec.util.MemoryUtils;
 
 /** Handles variable data types. */
-final class VLNullableEntryReader extends VLAbstractEntryReader {
+final class VLNullableEntryReader extends VLAbstractPageEntryReader {
 
   VLNullableEntryReader(ByteBuffer _buffer,
       PageDataInfo _pageInfo,
       ColumnPrecisionInfo _columnPrecInfo,
-      VLColumnBulkEntry _entry) {
+      VLColumnBulkEntry _entry,
+      VLColumnBulkInputCallback _containerCallback) {
 
-    super(_buffer, _pageInfo, _columnPrecInfo, _entry);
+    super(_buffer, _pageInfo, _columnPrecInfo, _entry, _containerCallback);
   }
 
   /** {@inheritDoc} */
@@ -52,11 +54,11 @@ final class VLNullableEntryReader extends VLAbstractEntryReader {
     load(true); // load new data to process
 
     final int[] value_lengths = entry.getValuesLength();
-    final int readBatch    = Math.min(entry.getMaxEntries(), valuesToRead);
-    final byte[] tgt_buff  = entry.getInternalDataArray();
-    final byte[] src_buff  = buffer.array();
-    final int src_len      = buffer.remaining();
-    final int tgt_len      = tgt_buff.length;
+    final int readBatch       = Math.min(entry.getMaxEntries(), valuesToRead);
+    final byte[] tgt_buff     = entry.getInternalDataArray();
+    final byte[] src_buff     = buffer.array();
+    final int src_len         = buffer.remaining();
+    final int tgt_len         = tgt_buff.length;
 
     // Counters
     int numValues = 0;
@@ -146,11 +148,17 @@ final class VLNullableEntryReader extends VLAbstractEntryReader {
         throw new DrillRuntimeException(message);
       }
 
-      final int data_len  = pageInfo.pageData.getInt(pageInfo.pageDataOff);
+      final int data_len = pageInfo.pageData.getInt(pageInfo.pageDataOff);
 
       if (remainingPageData() < (4 + data_len)) {
         final String message = String.format("Invalid Parquet page metadata; cannot process advertised page count..");
         throw new DrillRuntimeException(message);
+      }
+
+      // Is there enough memory to handle this large value?
+      if (batchMemoryConstraintsReached(1, 4, data_len)) {
+        entry.set(0, 0, 0, 0); // no data to be consumed
+        return entry;
       }
 
       // Register the length

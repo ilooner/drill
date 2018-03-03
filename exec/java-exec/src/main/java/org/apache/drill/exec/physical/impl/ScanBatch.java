@@ -17,9 +17,11 @@
  */
 package org.apache.drill.exec.physical.impl;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import io.netty.buffer.DrillBuf;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.drill.common.exceptions.ExecutionSetupException;
 import org.apache.drill.common.exceptions.UserException;
 import org.apache.drill.common.expression.SchemaPath;
@@ -32,6 +34,7 @@ import org.apache.drill.exec.exception.OutOfMemoryException;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.expr.TypeHelper;
 import org.apache.drill.exec.memory.BufferAllocator;
+import org.apache.drill.exec.ops.ContextInformation;
 import org.apache.drill.exec.ops.FragmentContext;
 import org.apache.drill.exec.ops.OperatorContext;
 import org.apache.drill.exec.physical.base.PhysicalOperator;
@@ -49,15 +52,17 @@ import org.apache.drill.exec.store.RecordReader;
 import org.apache.drill.exec.testing.ControlsInjector;
 import org.apache.drill.exec.testing.ControlsInjectorFactory;
 import org.apache.drill.exec.util.CallBack;
+import org.apache.drill.exec.util.record.RecordBatchStats;
+import org.apache.drill.exec.util.record.RecordBatchStats.RecordBatchStatsContext;
 import org.apache.drill.exec.vector.AllocationHelper;
 import org.apache.drill.exec.vector.NullableVarCharVector;
 import org.apache.drill.exec.vector.SchemaChangeCallBack;
 import org.apache.drill.exec.vector.ValueVector;
 
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+
+import io.netty.buffer.DrillBuf;
 
 /**
  * Record batch used for a particular scan. Operators against one or more
@@ -82,6 +87,7 @@ public class ScanBatch implements CloseableRecordBatch {
   private final BufferAllocator allocator;
   private final List<Map<String, String>> implicitColumnList;
   private String currentReaderClassName;
+  private final RecordBatchStatsContext batchStatsLogging;
   /** indicator to control the new implicit column optimization */
   private final boolean optimizeImplColumns;
   private List<RecordReader> readerList = null; // needed for repeatable scanners
@@ -93,7 +99,7 @@ public class ScanBatch implements CloseableRecordBatch {
    * @param context
    * @param oContext
    * @param readerList
-   * @param implicitColumnList : either an emptylist when all the readers do not have implicit
+   * @param implicitColumnList : either an empty list when all the readers do not have implicit
    *                        columns, or there is a one-to-one mapping between reader and implicitColumns.
    */
   public ScanBatch(FragmentContext context,
@@ -118,15 +124,16 @@ public class ScanBatch implements CloseableRecordBatch {
     try {
       if (!verifyImplcitColumns(readerList.size(), implicitColumnList)) {
         Exception ex = new ExecutionSetupException("Either implicit column list does not have same cardinality as reader list, "
-            + "or implicit columns are not same across all the record readers!");
+          + "or implicit columns are not same across all the record readers!");
         throw UserException.internalError(ex)
-            .addContext("Setup failed for", readerList.get(0).getClass().getSimpleName())
-            .build(logger);
+          .addContext("Setup failed for", readerList.get(0).getClass().getSimpleName())
+          .build(logger);
       }
 
       this.implicitColumnList = implicitColumnList;
       addImplicitVectors();
       currentReader = null;
+      batchStatsLogging = new RecordBatchStatsContext(context, oContext);
     } finally {
       oContext.getStats().stopProcessing();
     }
@@ -211,13 +218,13 @@ public class ScanBatch implements CloseableRecordBatch {
   }
 
   private IterOutcome internalNext() throws Exception {
-      while (true) {
-        if (currentReader == null && !getNextReaderIfHas()) {
+    while (true) {
+      if (currentReader == null && !getNextReaderIfHas()) {
         logger.trace("currentReader is null");
         return cleanAndReturnNone();
-        }
-        injector.injectChecked(context.getExecutionControls(), "next-allocate", OutOfMemoryException.class);
-        currentReader.allocate(mutator.fieldVectorMap());
+      }
+      injector.injectChecked(context.getExecutionControls(), "next-allocate", OutOfMemoryException.class);
+      currentReader.allocate(mutator.fieldVectorMap());
 
       recordCount = currentReader.next();
       logger.trace("currentReader.next return recordCount={}", recordCount);
@@ -225,6 +232,7 @@ public class ScanBatch implements CloseableRecordBatch {
       boolean isNewSchema = mutator.isNewSchema();
       populateImplicitVectorsAndSetCount();
       oContext.getStats().batchReceived(0, recordCount, isNewSchema);
+      logRecordBatchStats();
 
       boolean toContinueIter = true;
       if (recordCount == 0) {
@@ -264,7 +272,7 @@ public class ScanBatch implements CloseableRecordBatch {
     oContext.getStats().startProcessing();
     try {
       return internalNext();
-    }  catch (OutOfMemoryException ex) {
+    } catch (OutOfMemoryException ex) {
       clearFieldVectorMap();
       throw UserException.memoryError(ex).build(logger);
     } catch (ExecutionSetupException e) {
@@ -289,11 +297,15 @@ public class ScanBatch implements CloseableRecordBatch {
   private boolean implicitColumnsOptEnabled(FragmentContext context) {
     if (context.getOptions().getOption(ExecConstants.SCAN_OPTIMIZED_IMPLICIT_COLUMNS).bool_val) {
       // Enable this optimizations only if the client can handle it
-      int clientCapabilitiesVersion = context.getContextInformation().getCapabilitiesVersion();
+      final ContextInformation contextInfo = context.getContextInformation();
+
+      if (contextInfo != null) {
+        final int clientCapabilitiesVersion = contextInfo.getCapabilitiesVersion();
 
       if (clientCapabilitiesVersion > DrillCapabilities.Capabilities.OPTIMIZED_DUP_VALUES_VECTOR_V1.ordinal()) {
         return true;
       }
+    }
     }
     return false;
   }
@@ -369,6 +381,47 @@ public class ScanBatch implements CloseableRecordBatch {
     return container.getValueAccessorById(clazz, ids);
   }
 
+  private void logRecordBatchStats() {
+    final int MAX_FQN_LENGTH = 50;
+
+    if (recordCount == 0 || !batchStatsLogging.isEnableBatchSzLogging()) {
+      return; // NOOP
+    }
+
+    final String fqn        = getFQNForLogging(MAX_FQN_LENGTH);
+    final String msg        = RecordBatchStats.printRecordBatchStats(
+      batchStatsLogging.getContextOperatorId(),
+      fqn,
+      mutator.fieldVectorMap(),
+      batchStatsLogging.isEnableFgBatchSzLogging());
+
+    logger.info(msg);
+  }
+
+  /** Might truncate the FQN if too long */
+  private String getFQNForLogging(int maxLength) {
+    final String FQNKey = "FQN";
+    final ValueVector v = mutator.implicitFieldVectorMap.get(FQNKey);
+
+    final Object fqnObj;
+
+    if (v == null
+     || v.getAccessor().getValueCount() == 0
+     || (fqnObj = ((NullableVarCharVector) v).getAccessor().getObject(0)) == null) {
+
+      return "NA";
+    }
+
+    String fqn = fqnObj.toString();
+
+    if (fqn != null && fqn.length() > maxLength) {
+      fqn = fqn.substring(fqn.length() - maxLength, fqn.length());
+    }
+
+    return fqn;
+  }
+
+
   /**
    * Row set mutator implementation provided to record readers created by
    * this scan batch. Made visible so that tests can create this mutator
@@ -388,11 +441,11 @@ public class ScanBatch implements CloseableRecordBatch {
 
     /** Regular fields' value vectors indexed by fields' keys. */
     private final CaseInsensitiveMap<ValueVector> regularFieldVectorMap =
-            CaseInsensitiveMap.newHashMap();
+      CaseInsensitiveMap.newHashMap();
 
     /** Implicit fields' value vectors index by fields' keys. */
     private final CaseInsensitiveMap<ValueVector> implicitFieldVectorMap =
-        CaseInsensitiveMap.newHashMap();
+      CaseInsensitiveMap.newHashMap();
 
     private final SchemaChangeCallBack callBack = new SchemaChangeCallBack();
     private final BufferAllocator allocator;
@@ -408,10 +461,10 @@ public class ScanBatch implements CloseableRecordBatch {
     }
 
     public Mutator(OperatorContext oContext, BufferAllocator allocator, VectorContainer container, boolean optimizeImplColumns) {
-      this.oContext = oContext;
-      this.allocator = allocator;
-      this.container = container;
-      this.schemaChanged = false;
+      this.oContext            = oContext;
+      this.allocator           = allocator;
+      this.container           = container;
+      this.schemaChanged       = false;
       this.optimizeImplColumns = optimizeImplColumns;
     }
 

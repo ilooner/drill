@@ -49,10 +49,10 @@ public final class VarLengthColumnReaders {
     private final Decimal28SparseVector decimal28Vector;
     private final Decimal28SparseVector.Mutator mutator;
 
-    Decimal28Column(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
+    Decimal28Column(ParquetRecordReader parentReader, ColumnDescriptor descriptor,
                    ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, Decimal28SparseVector v,
                    SchemaElement schemaElement) throws ExecutionSetupException {
-      super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+      super(parentReader, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
       this.decimal28Vector = v;
       this.mutator         = decimal28Vector.getMutator();
     }
@@ -93,10 +93,10 @@ public final class VarLengthColumnReaders {
     private final NullableDecimal28SparseVector nullableDecimal28Vector;
     private final NullableDecimal28SparseVector.Mutator mutator;
 
-    NullableDecimal28Column(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
+    NullableDecimal28Column(ParquetRecordReader parentReader, ColumnDescriptor descriptor,
                     ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, NullableDecimal28SparseVector v,
                     SchemaElement schemaElement) throws ExecutionSetupException {
-      super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+      super(parentReader, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
       this.nullableDecimal28Vector = v;
       this.mutator                 = nullableDecimal28Vector.getMutator();
     }
@@ -138,10 +138,10 @@ public final class VarLengthColumnReaders {
     private final Decimal38SparseVector decimal38Vector;
     private final Decimal38SparseVector.Mutator mutator;
 
-    Decimal38Column(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
+    Decimal38Column(ParquetRecordReader parentReader, ColumnDescriptor descriptor,
                     ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, Decimal38SparseVector v,
                     SchemaElement schemaElement) throws ExecutionSetupException {
-      super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+      super(parentReader, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
       this.decimal38Vector = v;
       this.mutator         = decimal38Vector.getMutator();
     }
@@ -182,10 +182,10 @@ public final class VarLengthColumnReaders {
     private final NullableDecimal38SparseVector nullableDecimal38Vector;
     private final NullableDecimal38SparseVector.Mutator mutator;
 
-    NullableDecimal38Column(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
+    NullableDecimal38Column(ParquetRecordReader parentReader, ColumnDescriptor descriptor,
                             ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, NullableDecimal38SparseVector v,
                             SchemaElement schemaElement) throws ExecutionSetupException {
-      super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+      super(parentReader, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
       this.nullableDecimal38Vector = v;
       this.mutator                 = nullableDecimal38Vector.getMutator();
     }
@@ -229,10 +229,10 @@ public final class VarLengthColumnReaders {
     private final VarCharVector.Mutator mutator;
     private final VarCharVector varCharVector;
 
-    VarCharColumn(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
+    VarCharColumn(ParquetRecordReader parentReader, ColumnDescriptor descriptor,
                   ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, VarCharVector v,
                   SchemaElement schemaElement) throws ExecutionSetupException {
-      super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+      super(parentReader, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
       this.varCharVector = v;
       this.mutator       = v.getMutator();
     }
@@ -277,10 +277,10 @@ public final class VarLengthColumnReaders {
     protected final NullableVarCharVector.Mutator mutator;
     private final NullableVarCharVector vector;
 
-    NullableVarCharColumn(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
+    NullableVarCharColumn(ParquetRecordReader parentReader, ColumnDescriptor descriptor,
                           ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, NullableVarCharVector v,
                           SchemaElement schemaElement) throws ExecutionSetupException {
-      super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+      super(parentReader, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
       this.vector  = v;
       this.mutator = vector.getMutator();
     }
@@ -324,10 +324,10 @@ public final class VarLengthColumnReaders {
     private final VarBinaryVector varBinaryVector;
     private final VarBinaryVector.Mutator mutator;
 
-    VarBinaryColumn(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
+    VarBinaryColumn(ParquetRecordReader parentReader, ColumnDescriptor descriptor,
                     ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, VarBinaryVector v,
                     SchemaElement schemaElement) throws ExecutionSetupException {
-      super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+      super(parentReader, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
 
       this.varBinaryVector = v;
       this.mutator         = v.getMutator();
@@ -373,10 +373,10 @@ public final class VarLengthColumnReaders {
     private final NullableVarBinaryVector nullableVarBinaryVector;
     private final NullableVarBinaryVector.Mutator mutator;
 
-    NullableVarBinaryColumn(ParquetRecordReader parentReader, int allocateSize, ColumnDescriptor descriptor,
+    NullableVarBinaryColumn(ParquetRecordReader parentReader, ColumnDescriptor descriptor,
                             ColumnChunkMetaData columnChunkMetaData, boolean fixedLength, NullableVarBinaryVector v,
                             SchemaElement schemaElement) throws ExecutionSetupException {
-      super(parentReader, allocateSize, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
+      super(parentReader, descriptor, columnChunkMetaData, fixedLength, v, schemaElement);
       this.nullableVarBinaryVector = v;
       this.mutator                 = v.getMutator();
     }

@@ -439,7 +439,7 @@ public final class ${minor.class}Vector extends BaseDataValueVector implements V
 
   public final class Accessor extends BaseValueVector.BaseAccessor implements VariableWidthAccessor {
     final UInt${type.width}Vector.Accessor oAccessor = offsetVector.getAccessor();
-    
+
     public long getStartEnd(int index){
       return oAccessor.getTwoAsLong(index);
     }
@@ -572,6 +572,10 @@ public final class ${minor.class}Vector extends BaseDataValueVector implements V
       // Let's process the input
       while (input.hasNext()) {
         T entry = input.next();
+
+        if (entry == null || ((VLBulkEntry) entry).getNumValues() == 0) {
+          break; // this could happen when handling columnar batch sizing constraints
+        }
         bufferedMutator.setSafe(entry);
 
         if (callback != null) {
@@ -820,7 +824,7 @@ public final class ${minor.class}Vector extends BaseDataValueVector implements V
       this.parent         = _parent;
       this.data_buff_off  = parent.offsetVector.getAccessor().get(_start_idx);
       this.total_data_len = data_buff_off;
-      this.offsetsMutator = new UInt4Vector.BufferedMutator(_start_idx, _buff_sz * 4, parent.offsetVector);
+      this.offsetsMutator = new UInt4Vector.BufferedMutator(_start_idx, _buff_sz, parent.offsetVector);
 
       // Forcing the offsetsMutator to operate at index+1
       this.offsetsMutator.setSafe(data_buff_off);
@@ -890,6 +894,7 @@ public final class ${minor.class}Vector extends BaseDataValueVector implements V
 
       // Update counters
       data_buff_off += buffer.position();
+      assert data_buff_off == total_data_len;
 
       // Reset the byte buffer
       buffer.clear();
@@ -928,6 +933,10 @@ public final class ${minor.class}Vector extends BaseDataValueVector implements V
         remaining -= toCopy;
 
       } while (remaining > 0);
+
+      // We need to flush as offset data can be accessed during loading to
+      // figute out current payload size.
+      offsetsMutator.flush();
     }
   }
 }

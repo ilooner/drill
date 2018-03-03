@@ -17,41 +17,50 @@
  */
 package org.apache.drill.exec.store.parquet.columnreaders;
 
-import com.google.common.base.Stopwatch;
-import com.google.common.collect.Lists;
-import org.apache.drill.common.exceptions.DrillRuntimeException;
-import org.apache.drill.exec.vector.ValueVector;
-
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-public class VarLenBinaryReader {
+import org.apache.drill.common.exceptions.DrillRuntimeException;
+import org.apache.drill.exec.store.parquet.columnreaders.batchsizing.BatchSizingMemoryUtil;
+import org.apache.drill.exec.store.parquet.columnreaders.batchsizing.RecordBatchOverflow;
+import org.apache.drill.exec.store.parquet.columnreaders.batchsizing.RecordBatchOverflow.FieldOverflowDefinition;
+import org.apache.drill.exec.store.parquet.columnreaders.batchsizing.RecordBatchSizerManager;
+import org.apache.drill.exec.store.parquet.columnreaders.batchsizing.RecordBatchSizerManager.FieldOverflowState;
+import org.apache.drill.exec.store.parquet.columnreaders.batchsizing.RecordBatchSizerManager.FieldOverflowStateContainer;
+import org.apache.drill.exec.store.parquet.columnreaders.batchsizing.RecordBatchSizerManager.VLColumnBatchStats;
+import org.apache.drill.exec.util.record.RecordBatchStats;
+import org.apache.drill.exec.util.record.RecordBatchStats.RecordBatchStatsContext;
+import org.apache.drill.exec.vector.ValueVector;
 
-  ParquetRecordReader parentReader;
+import com.google.common.base.Stopwatch;
+import com.google.common.collect.Lists;
+
+/** Class which handles reading a batch of rows from a set of variable columns */
+public final class VarLenBinaryReader {
+  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(VarLenBinaryReader.class);
+
+  final ParquetRecordReader parentReader;
+  final RecordBatchSizerManager batchSizer;
   final List<VarLengthColumn<? extends ValueVector>> columns;
+  private final Comparator<VLColumnContainer> comparator = new VLColumnComparator();
+  /** Sorting columns to minimize overflow */
+  final List<VLColumnContainer> orderedColumns;
   final boolean useAsyncTasks;
-  private final long targetRecordCount;
   private final boolean useBulkReader;
 
   public VarLenBinaryReader(ParquetRecordReader parentReader, List<VarLengthColumn<? extends ValueVector>> columns) {
-    this.parentReader  = parentReader;
-    this.columns       = columns;
-    this.useAsyncTasks = parentReader.useAsyncColReader;
-    this.useBulkReader = parentReader.useBulkReader();
-
-    // Can't read any more records than fixed width fields will fit.
-    // Note: this calculation is very likely wrong; it is a simplified
-    // version of earlier code, but probably needs even more attention.
-
-    int totalFixedFieldWidth = parentReader.getBitWidthAllFixedFields() / 8;
-    if (totalFixedFieldWidth == 0) {
-      targetRecordCount = 0;
-    } else {
-      targetRecordCount = parentReader.getBatchSize() / totalFixedFieldWidth;
-    }
+    this.parentReader   = parentReader;
+    this.batchSizer     = parentReader.getBatchSizesMgr();
+    this.columns        = columns;
+    this.orderedColumns = populateOrderedColumns();
+    this.useAsyncTasks  = parentReader.useAsyncColReader;
+    this.useBulkReader  = parentReader.useBulkReader();
   }
 
   /**
@@ -70,11 +79,8 @@ public class VarLenBinaryReader {
     }
     Stopwatch timer = Stopwatch.createStarted();
 
-    // Can't read any more records than fixed width fields will fit.
-
-    if (targetRecordCount > 0) {
-      recordsToReadInThisPass = Math.min(recordsToReadInThisPass, targetRecordCount);
-    }
+    // Ensure we do not read more than batch record count
+    recordsToReadInThisPass = Math.min(recordsToReadInThisPass, batchSizer.getCurrentRecordsPerBatch());
 
     long recordsReadInCurrentPass = 0;
 
@@ -90,22 +96,163 @@ public class VarLenBinaryReader {
       recordsReadInCurrentPass = readRecordsInBulk((int) recordsToReadInThisPass);
     }
 
+    // Publish this information
+    parentReader.readState.setValuesReadInCurrentPass((int) recordsReadInCurrentPass);
+
+    // Update the stats
     parentReader.parquetReaderStats.timeVarColumnRead.addAndGet(timer.elapsed(TimeUnit.NANOSECONDS));
 
     return recordsReadInCurrentPass;
   }
 
   private int readRecordsInBulk(int recordsToReadInThisPass) throws IOException {
-    int recordsReadInCurrentPass = -1;
+    int batchNumRecords                  = recordsToReadInThisPass;
+    List<VLColumnBatchStats> columnStats = new ArrayList<VLColumnBatchStats>(columns.size());
+    int prevReadColumns                  = -1;
+    boolean overflowCondition            = false;
 
-    for (VarLengthColumn<?> columnReader : columns) {
-      int readColumns = columnReader.readRecordsInBulk(recordsToReadInThisPass);
-      assert (readColumns >= 0 && recordsReadInCurrentPass == readColumns || recordsReadInCurrentPass == -1);
+    for (VLColumnContainer columnContainer : orderedColumns) {
+      VarLengthColumn<?> columnReader = columnContainer.column;
 
-      recordsReadInCurrentPass = readColumns;
+      // Read the column data
+      int readColumns = columnReader.readRecordsInBulk(batchNumRecords);
+      assert readColumns <= batchNumRecords : "Reader cannot return more values than requested..";
+
+      if (!overflowCondition) {
+        if (prevReadColumns >= 0 && prevReadColumns != readColumns) {
+          overflowCondition = true;
+        } else {
+          prevReadColumns = readColumns;
+        }
+      }
+
+      // Enqueue this column entry information to handle overflow conditions; we will not know
+      // whether an overflow happened till all variable length columns have been processed
+      columnStats.add(new VLColumnBatchStats(columnReader.valueVec, readColumns));
+
+      // Decrease the number of records to read when a column returns less records (minimize overflow)
+      if (batchNumRecords > readColumns) {
+        batchNumRecords = readColumns;
+        // it seems this column caused an overflow (higher layer will not ask for more values than remaining)
+        ++columnContainer.numCausedOverflows;
+      }
     }
 
-    return recordsReadInCurrentPass;
+    // Set the value-count for each column
+    for (VarLengthColumn<?> columnReader : columns) {
+      columnReader.valuesReadInCurrentPass = batchNumRecords;
+    }
+
+    // Publish this batch statistics
+    publishBatchStats(columnStats, batchNumRecords);
+
+    // Handle column(s) overflow if any
+    if (overflowCondition) {
+      handleColumnOverflow(columnStats, batchNumRecords);
+    }
+
+    return batchNumRecords;
+  }
+
+  private void handleColumnOverflow(List<VLColumnBatchStats> columnStats, int batchNumRecords) {
+    // Overflow would happen if a column returned more values than "batchValueCount"; this can happen
+    // when a column Ci is called first, returns num-values-i, and then another column cj is called which
+    // returns less values than num-values-i.
+    RecordBatchOverflow.Builder builder = null;
+
+    // We need to collect all columns which are subject to an overflow (except for the ones which are already
+    // returning values from previous batch overflow)
+    for (VLColumnBatchStats columnStat : columnStats) {
+      if (columnStat.numValuesRead > batchNumRecords) {
+        // We need to figure out whether this column was already returning values from a previous batch
+        // overflow; if it is, then this is a NOOP (as the overflow data is still available to be replayed)
+        if (fieldHasAlreadyOverflowData(columnStat.vector.getField().getName())) {
+          continue;
+        }
+
+        // We need to set the value-count as otherwise some size related vector APIs won't work
+        columnStat.vector.getMutator().setValueCount(batchNumRecords);
+
+        // Lazy initialization
+        if (builder == null) {
+          builder = RecordBatchOverflow.newBuilder(
+            parentReader.getOperatorContext().getAllocator(),
+            parentReader.getRecordBatchStatsContext()
+          );
+        }
+
+        final int numOverflowValues = columnStat.numValuesRead - batchNumRecords;
+        builder.addFieldOverflow(columnStat.vector, batchNumRecords, numOverflowValues);
+      }
+    }
+
+    // Register batch overflow data with the record batch sizer manager (if any)
+    if (builder != null) {
+      Map<String, FieldOverflowStateContainer> overflowContainerMap = parentReader.batchSizerMgr.getFieldOverflowMap();
+      Map<String, FieldOverflowDefinition> overflowDefMap           = builder.build().getRecordOverflowDefinition().getFieldOverflowDefs();
+
+      for (Map.Entry<String, FieldOverflowDefinition> entry : overflowDefMap.entrySet()) {
+        FieldOverflowStateContainer overflowStateContainer = new FieldOverflowStateContainer(entry.getValue(), null);
+        // Register this overflow condition
+        overflowContainerMap.put(entry.getKey(), overflowStateContainer);
+      }
+    }
+
+    reorderVLColumns();
+  }
+
+  private void reorderVLColumns() {
+    // Finally, re-order the variable length columns since an overflow occurred
+    Collections.sort(orderedColumns, comparator);
+
+    if (parentReader.getRecordBatchStatsContext().isEnableFgBatchSzLogging()) {
+      boolean isFirstValue    = true;
+      final StringBuilder msg = new StringBuilder(RecordBatchStats.BATCH_STATS_PREFIX);
+      msg.append(": Dumping the variable length columns read order: ");
+
+      for (VLColumnContainer container : orderedColumns) {
+        if (!isFirstValue) {
+          msg.append(", ");
+          isFirstValue = false;
+        }
+        msg.append(container.column.valueVec.getField().getName());
+      }
+      msg.append('.');
+
+      logger.info(msg.toString());
+    }
+  }
+
+  private boolean fieldHasAlreadyOverflowData(String field) {
+    FieldOverflowStateContainer container = parentReader.batchSizerMgr.getFieldOverflowContainer(field);
+
+    if (container == null) {
+      return false;
+    }
+
+    if (container.overflowState == null || container.overflowState.isOverflowDataFullyConsumed()) {
+      parentReader.batchSizerMgr.releaseFieldOverflowContainer(field);
+      return false;
+    }
+    return true;
+  }
+
+  private void publishBatchStats(List<VLColumnBatchStats> stats, int batchNumRecords) {
+    // First, let us inform the variable columns of the number of records returned by this batch; this
+    // is for managing overflow data state.
+    Map<String, FieldOverflowStateContainer> overflowMap =
+      parentReader.batchSizerMgr.getFieldOverflowMap();
+
+    for (FieldOverflowStateContainer container : overflowMap.values()) {
+      FieldOverflowState overflowState = container.overflowState;
+
+      if (overflowState != null) {
+        overflowState.onNewBatchValuesConsumed(batchNumRecords);
+      }
+    }
+
+    // Now publish the same to the record batch sizer manager
+    parentReader.batchSizerMgr.onEndOfBatch(batchNumRecords, stats);
   }
 
   private long determineSizesSerial(long recordsToReadInThisPass) throws IOException {
@@ -166,6 +313,66 @@ public class VarLenBinaryReader {
   protected void handleAndRaise(String s, Exception e) {
     String message = "Error in parquet record reader.\nMessage: " + s;
     throw new DrillRuntimeException(message, e);
+  }
+
+  private List<VLColumnContainer> populateOrderedColumns() {
+    List<VLColumnContainer> result = new ArrayList<VLColumnContainer>(columns.size());
+
+    // first, we need to populate this list
+    for (VarLengthColumn<? extends ValueVector> column : columns) {
+      result.add(new VLColumnContainer(column));
+    }
+
+    // now perform the sorting
+    Collections.sort(result, comparator);
+
+    return result;
+  }
+
+// ----------------------------------------------------------------------------
+// Internal Data Structure
+// ----------------------------------------------------------------------------
+
+  /** Container class which will will allow us to implement ordering so to minimize overflow */
+  private static final class VLColumnContainer {
+    /** Variable length column */
+    private final VarLengthColumn<? extends ValueVector> column;
+    /** Indicator to indicate whether it is a SPARSE DECIMAL */
+    private final boolean isSparseDecimal;
+    /** Number of times this method caused overflow */
+    private int numCausedOverflows;
+
+    /** Constructor */
+    private VLColumnContainer(VarLengthColumn<? extends ValueVector> column) {
+      this.column          = column;
+      this.isSparseDecimal = BatchSizingMemoryUtil.isSparseBoolean(column.valueVec.getField().getType());
+    }
+  }
+
+  /** Comparator class to minimize overflow; columns with highest chance of causing overflow
+   * should be iterated first (have smallest value).
+   */
+  private static final class VLColumnComparator implements Comparator<VLColumnContainer> {
+
+    // We compare using overflow and whether the column is sparse decimal (since Parquet treats it
+    // as variable length but Drill maps it to a fixed length):
+    // - If the column is sparse decimal, then it should be accessed last (highest order)
+    // - If the column caused overflows, then it should execute first (lowest order)
+    @Override
+    public int compare(VLColumnContainer o1, VLColumnContainer o2) {
+      // Start with sparse decimal field
+      if (o1.isSparseDecimal || o2.isSparseDecimal) {
+        if (o1.isSparseDecimal == o2.isSparseDecimal) { return 0; }
+        if (o1.isSparseDecimal) {return 1; }
+        return -1;
+      }
+      // Now use the overflow field
+      if (o1.numCausedOverflows == o2.numCausedOverflows) { return 0; }
+      if (o1.numCausedOverflows < o2.numCausedOverflows)  { return 1; }
+
+      return -1;
+    }
+
   }
 
 }
