@@ -63,6 +63,8 @@ import org.apache.drill.exec.vector.ValueVector;
 import org.apache.drill.exec.vector.complex.AbstractContainerVector;
 import org.apache.calcite.rel.core.JoinRelType;
 
+import static org.apache.drill.exec.physical.impl.join.HashJoinMemoryCalculator.PartitionStatSet.prettyPrintBytes;
+
 public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   protected static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(HashJoinBatch.class);
 
@@ -795,8 +797,14 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   public String makeDebugString() {
     final StringBuilder sb = new StringBuilder();
 
+    sb.append("Memory Info:\n");
+    sb.append("memoryLimit: ").append(prettyPrintBytes(allocator.getLimit())).append("\n");
+    sb.append("allocatedMemory: ").append(prettyPrintBytes(allocator.getAllocatedMemory())).append("\n");
+    sb.append("peakAllocated: ").append(prettyPrintBytes(allocator.getPeakMemoryAllocation())).append("\n");
+    sb.append("\n");
+
     for (int partitionIndex = 0; partitionIndex < partitions.length; partitionIndex++) {
-      final String partitionPrefix = "Partition " + partitionIndex + ": ";
+      final String partitionPrefix = "Hash Partition " + partitionIndex + ": ";
       final HashPartition hashPartition = partitions[partitionIndex];
       sb.append(partitionPrefix).append(hashPartition.makeDebugString()).append("\n");
     }

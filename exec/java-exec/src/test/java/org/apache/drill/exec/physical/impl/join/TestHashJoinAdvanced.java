@@ -24,6 +24,7 @@ import org.apache.drill.exec.ExecConstants;
 import org.apache.drill.test.BaseTestQuery;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import java.io.BufferedWriter;
@@ -39,6 +40,8 @@ public class TestHashJoinAdvanced extends JoinTestBase {
   @BeforeClass
   public static void disableMergeJoin() throws Exception {
     dirTestWatcher.copyResourceToRoot(Paths.get("join", "empty_part"));
+    // dirTestWatcher.copyResourceToRoot(Paths.get("join", "store_sales"));
+    // dirTestWatcher.copyResourceToRoot(Paths.get("join", "store"));
     dirTestWatcher.copyFileToRoot(Paths.get("sample-data", "region.parquet"));
     dirTestWatcher.copyFileToRoot(Paths.get("sample-data", "nation.parquet"));
     test(DISABLE_MJ);
@@ -206,5 +209,45 @@ public class TestHashJoinAdvanced extends JoinTestBase {
 
     final Pattern sortHashJoinPattern = Pattern.compile(".*Sort.*HashJoin", Pattern.DOTALL);
     testPlanMatchingPatterns(query, new Pattern[]{sortHashJoinPattern}, null);
+  }
+
+  @Test
+  @Ignore
+  public void testOOM() throws Exception {
+    final String query = "select count(*) as countVal from (SELECT\n" +
+      "ss_quantity ,\n" +
+      "COUNT( DISTINCT ss_store_sk) AS accounts ,\n" +
+      "SUM(wholesale) AS sum_wholesale ,\n" +
+      "SUM(listprice) AS sum_listprice ,\n" +
+      "SUM(_salesprice) AS sum_salesprice\n" +
+      "FROM\n" +
+      "(\n" +
+      "SELECT\n" +
+      "ss_quantity ,\n" +
+      "ss_store_sk,\n" +
+      "sum(case when s.ss_quantity between 1 AND 20 then s.ss_wholesale_cost else 0 end) as wholesale,\n" +
+      "sum(case when s.ss_quantity between 21 AND 40 then s.ss_list_price else 0 end) as  listprice,\n" +
+      "sum(case when s.ss_quantity BETWEEN 41 AND 60 then s.ss_sales_price else 0 end) as _salesprice,\n" +
+      "sum(case when s.ss_quantity BETWEEN 61 AND 81 then s.ss_net_paid else 0 end) as  _netpaid\n" +
+      "FROM\n" +
+      "dfs.`join/store_sales` s\n" +
+      "WHERE\n" +
+      "ss_store_sk IN(\n" +
+      "SELECT\n" + "s_store_sk\n" + "FROM\n" + "dfs.`join/store`\n" + "WHERE\n" + "s_market_id IN( 2, 4, 6, 7, 8)\n" + "and s_store_sk not in (3)\n" + ")\n" +
+      "AND s.ss_quantity between 1 AND 99\n" + "AND (ss_item_sk, ss_ticket_number)\n" +
+      "IN(\n" +
+      "SELECT\n" + "ss_item_sk, ss_ticket_number\n" + "FROM\n" + "dfs.`join/store_sales`\n" + "WHERE\n" + "ss_store_sk IN(1, 2, 5, 6, 7, 8) /*PW*/\n" +
+      "AND ss_quantity between 1 AND 99\n" +
+      "AND ss_promo_sk IN( 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110)\n" +
+      ")\n" +
+      "AND s.ss_promo_sk IN( 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110)\n" +
+      "GROUP BY\n" + "ss_quantity,\n" + "ss_store_sk\n" + ") dat\n" + "GROUP BY        ss_quantity\n" + "ORDER BY        ss_quantity)";
+
+    testBuilder()
+      .sqlQuery(query)
+      .unOrdered()
+      .baselineColumns("countVal")
+      .baselineValues(99L)
+      .go();
   }
 }
