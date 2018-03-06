@@ -189,7 +189,7 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
       }
 
       newVC.setRecordCount(0);
-      inMemBatches.inc(); ; // one more batch in memory
+      inMemBatches.inc(); // one more batch in memory
       success = true;
     } finally {
       if ( !success ) {
