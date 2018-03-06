@@ -17,7 +17,6 @@
  */
 package org.apache.drill.exec.physical.impl.common;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import org.apache.drill.common.exceptions.RetryAfterSpillException;
 import org.apache.drill.common.exceptions.UserException;
