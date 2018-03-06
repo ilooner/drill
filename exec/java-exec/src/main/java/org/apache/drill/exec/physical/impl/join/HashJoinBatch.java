@@ -86,6 +86,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   private ChainedHashTable baseHashTable;
   private boolean buildSideIsEmpty = true;
   private boolean canSpill = true;
+  private boolean wasKilled; // a kill was received, may need to clean spilled partns
 
   HashPartition partitions[];
 
@@ -279,7 +280,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         //
         //  (recursively) Handle the spilled partitions, if any
         //
-        if ( !buildSideIsEmpty && !spilledPartitionsList.isEmpty()) {
+        if ( !buildSideIsEmpty && !wasKilled && !spilledPartitionsList.isEmpty()) {
           // Get the next (previously) spilled partition to handle as incoming
           HJSpilledPartition currSp = spilledPartitionsList.remove(0);
 
@@ -326,6 +327,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
           return innerNext(); // start processing the next spilled partition "recursively"
         }
+
       } else {
         // Our build side is empty, we won't have any matches, clear the probe side
         if (leftUpstream == IterOutcome.OK_NEW_SCHEMA || leftUpstream == IterOutcome.OK) {
@@ -827,6 +829,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
   @Override
   public void killIncoming(boolean sendUpstream) {
+    wasKilled = true;
     probeBatch.kill(sendUpstream);
     buildBatch.kill(sendUpstream);
   }
@@ -836,6 +839,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     for ( HashPartition partn : partitions ) {
       partn.close();
     }
+    cleanup();
     super.close();
   }
 
