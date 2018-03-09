@@ -44,6 +44,9 @@ import org.apache.drill.exec.vector.IntVector;
 import org.apache.drill.exec.vector.ValueVector;
 import org.apache.drill.common.exceptions.RetryAfterSpillException;
 
+/**
+ *
+ */
 public abstract class HashTableTemplate implements HashTable {
 
   private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(HashTable.class);
@@ -101,8 +104,6 @@ public abstract class HashTableTemplate implements HashTable {
   private int numResizing = 0;
 
   private int resizingTime = 0;
-
-  private int maxVarcharSize = 8; // for varchar allocation
 
   // This class encapsulates the links, keys and values for up to BATCH_SIZE
   // *unique* records. Thus, suppose there are N incoming record batches, each
@@ -821,9 +822,6 @@ public abstract class HashTableTemplate implements HashTable {
     vector.getMutator().setValueCount(size);
     return vector;
   }
-
-  @Override
-  public void setMaxVarcharSize(int size) { maxVarcharSize = size; }
 
   // These methods will be code-generated in the context of the outer class
   protected abstract void doSetup(@Named("incomingBuild") VectorContainer incomingBuild, @Named("incomingProbe") RecordBatch incomingProbe) throws SchemaChangeException;
