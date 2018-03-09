@@ -116,16 +116,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   private int cycleNum = 0; // primary, secondary, tertiary, etc.
   private int originalPartition = -1; // the partition a secondary reads from
   IntVector read_HV_vector; // HV vector that was read from the spilled batch
-  private int MAX_BATCHES_IN_MEMORY;
-  private int MAX_BATCHES_PER_PARTITION;
-
-  public class inMemBatchCounter {
-    private int inMemBatches;
-    public void inc() { inMemBatches++; }
-    public void dec() { inMemBatches--; }
-    public int value() { return inMemBatches; }
-  }
-  public inMemBatchCounter inMemBatches = new inMemBatchCounter();
+  private int maxBatchesInMemory;
 
   private static class HJSpilledPartition {
     public int innerSpilledBatches;
@@ -139,7 +130,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   private ArrayList<HJSpilledPartition> spilledPartitionsList;
   private HJSpilledPartition spilledInners[]; // for the outer to find the partition
 
-  private int operatorId; // for the spill file name
   public enum Metric implements MetricDef {
 
     NUM_BUCKETS,
@@ -226,6 +216,14 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           // Other cases termination conditions
           return outcome;
       }
+    }
+  }
+
+  public HashJoinMemoryCalculator getCalculatorImpl() {
+    if (maxBatchesInMemory == 0) {
+      return new HashJoinMemoryCalculatorImpl();
+    } else {
+      return new MechanicalHashJoinMemoryCalculator(maxBatchesInMemory);
     }
   }
 
@@ -405,13 +403,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     partitionMask = numPartitions - 1; // e.g. 32 --> 0x1F
     bitsInMask = Integer.bitCount(partitionMask); // e.g. 0x1F -> 5
 
-    RECORDS_PER_BATCH = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_ROWS_IN_BATCH_VALIDATOR);
-
-    MAX_BATCHES_IN_MEMORY = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_BATCHES_IN_MEMORY_VALIDATOR);
-    MAX_BATCHES_PER_PARTITION = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_BATCHES_PER_PARTITION_VALIDATOR);
-
-    //  =================================
-
     // Create the FIFO list of spilled partitions (pairs - inner/outer)
     spilledPartitionsList = new ArrayList<>();
 
@@ -425,12 +416,11 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
    * Initialize fields (that may be reused when reading spilled partitions)
    */
   private void initializeBuild() {
-    assert inMemBatches.value() == 0; // check that no in-memory batches left
     baseHashTable.updateIncoming(buildBatch, probeBatch); // in case we process the spilled files
     // Recreate the partitions every time build is initialized
     for (int part = 0; part < numPartitions; part++ ) {
       partitions[part] = new HashPartition(context, allocator, baseHashTable, buildBatch, probeBatch,
-        RECORDS_PER_BATCH, spillSet, part, inMemBatches, cycleNum);
+        RECORDS_PER_BATCH, spillSet, part, cycleNum);
     }
 
     spilledInners = new HJSpilledPartition[numPartitions];
@@ -514,7 +504,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       int maxBatchSize = firstCycle? RecordBatch.MAX_BATCH_SIZE: RECORDS_PER_BATCH;
       boolean hasProbeData = leftUpstream != IterOutcome.NONE;
       boolean doMemoryCalculation = canSpill && hasProbeData;
-      HashJoinMemoryCalculator calc = new HashJoinMemoryCalculatorImpl();
+      HashJoinMemoryCalculator calc = getCalculatorImpl();
 
       calc.initialize(doMemoryCalculation);
       buildCalc = calc.next();
@@ -748,7 +738,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     }
 
     numPartitions = BaseAllocator.nextPowerOfTwo(numPartitions); // in case not a power of 2
-    RECORDS_PER_BATCH = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_ROWS_IN_BATCH_VALIDATOR);
+
     this.allocator = oContext.getAllocator();
 
     final long memLimit = context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_MEMORY_VALIDATOR);
@@ -756,6 +746,11 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     if (memLimit != 0) {
       allocator.setLimit(memLimit);
     }
+
+    RECORDS_PER_BATCH = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_ROWS_IN_BATCH_VALIDATOR);
+    maxBatchesInMemory = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_BATCHES_IN_MEMORY_VALIDATOR);
+
+
 
     logger.info("Memory limit {} bytes", FileUtils.byteCountToDisplaySize(allocator.getLimit()));
     spillSet = new SpillSet(context, popConfig);
