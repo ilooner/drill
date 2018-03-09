@@ -173,6 +173,16 @@ public interface HashJoinMemoryCalculator extends HashJoinStateCalculator<HashJo
       return numRecords;
     }
 
+    public int getNumInMemoryBatches() {
+      int numBatches = 0;
+
+      for (final PartitionStat partitionStat: partitionStats) {
+        numBatches += partitionStat.getNumInMemoryBatches();
+      }
+
+      return numBatches;
+    }
+
     // Somewhat inefficient but not a big deal since we don't deal with that many partitions
     public long getConsumedMemory() {
       long consumedMemory = 0L;
