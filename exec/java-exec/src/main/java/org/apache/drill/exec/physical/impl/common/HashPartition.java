@@ -27,7 +27,6 @@ import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.expr.TypeHelper;
 import org.apache.drill.exec.memory.BufferAllocator;
 import org.apache.drill.exec.ops.FragmentContext;
-import org.apache.drill.exec.physical.impl.join.HashJoinBatch;
 import org.apache.drill.exec.physical.impl.join.HashJoinHelper;
 import org.apache.drill.exec.physical.impl.join.HashJoinMemoryCalculator;
 import org.apache.drill.exec.physical.impl.spill.SpillSet;
@@ -104,26 +103,22 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
   private String spillFile;
 
   private BufferAllocator allocator;
-  private FragmentContext context;
   private int RECORDS_PER_BATCH;
   ChainedHashTable baseHashTable;
   private SpillSet spillSet;
   private boolean isSpilled; // is this partition spilled ?
   private boolean processingOuter; // is (inner done spilling and) now the outer is processed?
   private boolean outerBatchNotNeeded; // when the inner is whole in memory
-  private RecordBatch buildBatch;
+  private BatchSchema buildBatch;
   private RecordBatch probeBatch;
-  private HashJoinBatch.inMemBatchCounter inMemBatches; // shared among all partitions
   private int cycleNum;
   private List<HashJoinMemoryCalculator.BatchStat> inMemoryBatchStats = Lists.newArrayList();
   private long partitionInMemorySize;
   private long numInMemoryRecords;
 
   public HashPartition(FragmentContext context, BufferAllocator allocator, ChainedHashTable baseHashTable,
-                       RecordBatch buildBatch, RecordBatch probeBatch,
-                       int recordsPerBatch, SpillSet spillSet, int partNum,
-                       HashJoinBatch.inMemBatchCounter inMemBatches, int cycleNum) {
-    this.context = context;
+                       BatchSchema buildBatch, RecordBatch probeBatch,
+                       int recordsPerBatch, SpillSet spillSet, int partNum, int cycleNum) {
     this.allocator = allocator;
     this.baseHashTable = baseHashTable;
     this.buildBatch = buildBatch;
@@ -131,7 +126,6 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     this.RECORDS_PER_BATCH = recordsPerBatch;
     this.spillSet = spillSet;
     this.partitionNum = partNum;
-    this.inMemBatches = inMemBatches;
     this.cycleNum = cycleNum;
 
     try {
@@ -157,22 +151,20 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
    * Allocate a new vector container for either right or left record batch
    * Add an additional special vector for the hash values
    * Note: this call may OOM !!
-   * @param rb - either the right or the left record batch
+   * @param batchSchema - either the right or the left batch schema
    * @return the new vector container
    */
-  private VectorContainer allocateNewVectorContainer(RecordBatch rb) {
+  private VectorContainer allocateNewVectorContainer(BatchSchema batchSchema) {
     VectorContainer newVC = new VectorContainer();
-    VectorContainer fromVC = rb.getContainer();
-    Iterator<VectorWrapper<?>> vci = fromVC.iterator();
+    Iterator<MaterializedField> fields = batchSchema.iterator();
     boolean success = false;
 
     try {
-      while (vci.hasNext()) {
-        VectorWrapper vw = vci.next();
+      while (fields.hasNext()) {
+        MaterializedField field = fields.next();
         // If processing a spilled container, skip the last column (HV)
-        if ( cycleNum > 0 && ! vci.hasNext() ) { break; }
-        ValueVector vv = vw.getValueVector();
-        ValueVector newVV = TypeHelper.getNewVector(vv.getField(), allocator);
+        if ( cycleNum > 0 && ! fields.hasNext() ) { break; }
+        ValueVector newVV = TypeHelper.getNewVector(field, allocator);
         newVC.add(newVV); // add first to allow dealloc in case of an OOM
 
         if (newVV instanceof FixedWidthVector) {
@@ -187,7 +179,6 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
       }
 
       newVC.setRecordCount(0);
-      inMemBatches.inc(); ; // one more batch in memory
       success = true;
     } finally {
       if ( !success ) {
@@ -202,7 +193,7 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
    */
   public void allocateNewCurrentBatchAndHV() {
     if ( outerBatchNotNeeded ) { return; } // skip when the inner is whole in memory
-    currentBatch = allocateNewVectorContainer(processingOuter ? probeBatch : buildBatch);
+    currentBatch = allocateNewVectorContainer(processingOuter ? probeBatch.getSchema() : buildBatch);
     currHVVector = new IntVector(MaterializedField.create("Hash_Values", HVtype), allocator);
     currHVVector.allocateNew(RECORDS_PER_BATCH);
   }
@@ -296,7 +287,6 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
 
     while ( tmpBatchesList.size() > 0 ) {
       VectorContainer vc = tmpBatchesList.remove(0);
-      inMemBatches.dec();
 
       int numRecords = vc.getRecordCount();
 
@@ -317,7 +307,6 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
       }
       vc.zeroVectors();
       logger.trace("HASH JOIN: Took {} us to spill {} records", writer.time(TimeUnit.MICROSECONDS), numRecords);
-
     }
   }
 
@@ -406,7 +395,6 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
 
   private void freeCurrentBatchAndHVVector() {
     if ( currentBatch != null ) {
-      inMemBatches.dec();
       currentBatch.clear();
       currentBatch = null;
     }
@@ -515,7 +503,6 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     }
     while ( tmpBatchesList.size() > 0 ) {
       VectorContainer vc = tmpBatchesList.remove(0);
-      inMemBatches.dec();
       vc.clear();
     }
     closeWriter();

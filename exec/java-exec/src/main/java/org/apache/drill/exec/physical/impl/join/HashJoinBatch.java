@@ -125,7 +125,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     public void dec() { inMemBatches--; }
     public int value() { return inMemBatches; }
   }
-  public inMemBatchCounter inMemBatches = new inMemBatchCounter();
 
   private static class HJSpilledPartition {
     public int innerSpilledBatches;
@@ -425,12 +424,11 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
    * Initialize fields (that may be reused when reading spilled partitions)
    */
   private void initializeBuild() {
-    assert inMemBatches.value() == 0; // check that no in-memory batches left
     baseHashTable.updateIncoming(buildBatch, probeBatch); // in case we process the spilled files
     // Recreate the partitions every time build is initialized
     for (int part = 0; part < numPartitions; part++ ) {
-      partitions[part] = new HashPartition(context, allocator, baseHashTable, buildBatch, probeBatch,
-        RECORDS_PER_BATCH, spillSet, part, inMemBatches, cycleNum);
+      partitions[part] = new HashPartition(context, allocator, baseHashTable, buildBatch.getSchema(), probeBatch,
+        RECORDS_PER_BATCH, spillSet, part, cycleNum);
     }
 
     spilledInners = new HJSpilledPartition[numPartitions];

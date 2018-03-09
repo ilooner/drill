@@ -57,6 +57,13 @@ public interface HashTable {
 
   PutStatus put(int incomingRowIdx, IndexPointer htIdxHolder, int hashCode) throws SchemaChangeException, RetryAfterSpillException;
 
+  /**
+   * @param incomingRowIdx The index of the key in the probe batch.
+   * @param hashCode The hashCode of the key.
+   * @return Returns -1 if the data in the probe batch at the given incomingRowIdx is not in the hash table. Otherwise returns
+   * the composite index of the key in the hash table (index of BatchHolder and record in Batch Holder).
+   * @throws SchemaChangeException
+   */
   int probeForKey(int incomingRowIdx, int hashCode) throws SchemaChangeException;
 
   void getStats(HashTableStats stats);

@@ -21,6 +21,7 @@ package org.apache.drill.exec.physical.config;
 import java.util.Iterator;
 import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.drill.common.logical.data.JoinCondition;
 import org.apache.drill.exec.physical.base.AbstractBase;
 import org.apache.drill.exec.physical.base.PhysicalOperator;
