@@ -45,6 +45,9 @@ import org.apache.drill.exec.vector.IntVector;
 import org.apache.drill.exec.vector.ValueVector;
 import org.apache.drill.common.exceptions.RetryAfterSpillException;
 
+/**
+ *
+ */
 public abstract class HashTableTemplate implements HashTable {
 
   private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(HashTable.class);
@@ -103,7 +106,6 @@ public abstract class HashTableTemplate implements HashTable {
 
   private int resizingTime = 0;
 
-  private int maxVarcharSize = 8; // for varchar allocation
   private Iterator<BatchHolder> htIter = null;
 
   // This class encapsulates the links, keys and values for up to BATCH_SIZE
@@ -823,9 +825,6 @@ public abstract class HashTableTemplate implements HashTable {
     vector.getMutator().setValueCount(size);
     return vector;
   }
-
-  @Override
-  public void setMaxVarcharSize(int size) { maxVarcharSize = size; }
 
   public Pair<VectorContainer, Integer> nextBatch() {
     if (batchHolders == null || batchHolders.size() == 0) {

@@ -25,6 +25,7 @@ import org.apache.drill.common.types.TypeProtos;
 import org.apache.drill.common.types.TypeProtos.MinorType;
 import org.apache.drill.common.types.Types;
 import org.apache.drill.exec.memory.RootAllocator;
+import org.apache.drill.test.BaseDirTestWatcher;
 import org.apache.drill.test.DrillTest;
 import org.apache.drill.test.OperatorFixture;
 import org.apache.drill.test.rowSet.DirectRowSet;
@@ -36,6 +37,7 @@ import org.apache.drill.test.rowSet.RowSetComparison;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -48,9 +50,12 @@ public class TestVectorContainer extends DrillTest {
   // once that is available.
   protected static OperatorFixture fixture;
 
+  @ClassRule
+  public static final BaseDirTestWatcher dirTestWatcher = new BaseDirTestWatcher();
+
   @BeforeClass
   public static void setUpBeforeClass() throws Exception {
-    fixture = OperatorFixture.standardFixture();
+    fixture = OperatorFixture.standardFixture(dirTestWatcher);
   }
 
   @AfterClass

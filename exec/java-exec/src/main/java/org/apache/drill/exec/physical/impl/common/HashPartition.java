@@ -29,7 +29,6 @@ import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.expr.TypeHelper;
 import org.apache.drill.exec.memory.BufferAllocator;
 import org.apache.drill.exec.ops.FragmentContext;
-import org.apache.drill.exec.physical.impl.join.HashJoinBatch;
 import org.apache.drill.exec.physical.impl.join.HashJoinHelper;
 import org.apache.drill.exec.physical.impl.join.HashJoinMemoryCalculator;
 import org.apache.drill.exec.physical.impl.spill.SpillSet;
@@ -55,8 +54,8 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- *  The class HashPartition
- *
+ * <h2>Overview</h2>
+ * <p>
  *    Created to represent an active partition for the Hash-Join operator
  *  (active means: currently receiving data, or its data is being probed; as opposed to fully
  *   spilled partitions).
@@ -65,6 +64,7 @@ import java.util.concurrent.TimeUnit;
  *    If all this partition's build/inner data was spilled, then it begins to work as an outer
  *  partition (see the flag "processingOuter") -- reusing some of the fields (e.g., currentBatch,
  *  currHVVector, writer, spillFile, partitionBatchesCount) for the outer.
+ *  </p>
  */
 public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(HashPartition.class);
@@ -106,7 +106,6 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
   private String spillFile;
 
   private BufferAllocator allocator;
-  private FragmentContext context;
   private int RECORDS_PER_BATCH;
   ChainedHashTable baseHashTable;
   private SpillSet spillSet;
@@ -115,7 +114,6 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
   private boolean outerBatchNotNeeded; // when the inner is whole in memory
   private RecordBatch buildBatch;
   private RecordBatch probeBatch;
-  private HashJoinBatch.inMemBatchCounter inMemBatches; // shared among all partitions
   private int cycleNum;
   private List<HashJoinMemoryCalculator.BatchStat> inMemoryBatchStats = Lists.newArrayList();
   private long partitionInMemorySize;
@@ -123,9 +121,7 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
 
   public HashPartition(FragmentContext context, BufferAllocator allocator, ChainedHashTable baseHashTable,
                        RecordBatch buildBatch, RecordBatch probeBatch,
-                       int recordsPerBatch, SpillSet spillSet, int partNum,
-                       HashJoinBatch.inMemBatchCounter inMemBatches, int cycleNum) {
-    this.context = context;
+                       int recordsPerBatch, SpillSet spillSet, int partNum, int cycleNum) {
     this.allocator = allocator;
     this.baseHashTable = baseHashTable;
     this.buildBatch = buildBatch;
@@ -133,12 +129,10 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     this.RECORDS_PER_BATCH = recordsPerBatch;
     this.spillSet = spillSet;
     this.partitionNum = partNum;
-    this.inMemBatches = inMemBatches;
     this.cycleNum = cycleNum;
 
     try {
       this.hashTable = baseHashTable.createAndSetupHashTable(null);
-      this.hashTable.setMaxVarcharSize(maxColumnWidth);
     } catch (ClassTransformationException e) {
       throw UserException.unsupportedError(e)
         .message("Code generation error - likely an error in the code.")
@@ -189,7 +183,7 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
       }
 
       newVC.setRecordCount(0);
-      inMemBatches.inc(); // one more batch in memory
+
       success = true;
     } finally {
       if ( !success ) {
@@ -298,7 +292,6 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
 
     while ( tmpBatchesList.size() > 0 ) {
       VectorContainer vc = tmpBatchesList.remove(0);
-      inMemBatches.dec();
 
       int numRecords = vc.getRecordCount();
 
@@ -319,7 +312,6 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
       }
       vc.zeroVectors();
       logger.trace("HASH JOIN: Took {} us to spill {} records", writer.time(TimeUnit.MICROSECONDS), numRecords);
-
     }
   }
 
@@ -412,7 +404,6 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
 
   private void freeCurrentBatchAndHVVector() {
     if ( currentBatch != null ) {
-      inMemBatches.dec();
       currentBatch.clear();
       currentBatch = null;
     }
@@ -509,6 +500,9 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     hashTable.getStats(newStats);
   }
 
+  /**
+   * Frees memory allocated to the {@link HashTable} and {@link HashJoinHelper}.
+   */
   public void clearHashTableAndHelper() {
     if (hashTable != null) {
       hashTable.clear();
@@ -529,7 +523,6 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     }
     while ( tmpBatchesList.size() > 0 ) {
       VectorContainer vc = tmpBatchesList.remove(0);
-      inMemBatches.dec();
       vc.clear();
     }
     closeWriter();
@@ -539,6 +532,10 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     if ( containers != null ) { containers.clear(); }
   }
 
+  /**
+   * Creates a debugging string containing information about memory usage.
+   * @return A debugging string.
+   */
   public String makeDebugString() {
     return String.format("[hashTable = %s]",
       hashTable == null ? "None": hashTable.makeDebugString());

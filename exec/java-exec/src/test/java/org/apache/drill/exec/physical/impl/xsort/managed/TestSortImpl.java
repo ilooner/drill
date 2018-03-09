@@ -40,6 +40,7 @@ import org.apache.drill.exec.proto.UserBitShared.QueryId;
 import org.apache.drill.exec.record.BatchSchema;
 import org.apache.drill.exec.record.VectorContainer;
 import org.apache.drill.exec.vector.ValueVector;
+import org.apache.drill.test.BaseDirTestWatcher;
 import org.apache.drill.test.DrillTest;
 import org.apache.drill.test.OperatorFixture;
 import org.apache.drill.test.rowSet.DirectRowSet;
@@ -52,6 +53,7 @@ import org.apache.drill.test.rowSet.RowSetBuilder;
 import org.apache.drill.test.rowSet.RowSetComparison;
 import org.apache.drill.test.rowSet.RowSetReader;
 import org.apache.drill.test.rowSet.RowSetWriter;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -67,6 +69,9 @@ import io.netty.buffer.DrillBuf;
 
 @Category(OperatorTest.class)
 public class TestSortImpl extends DrillTest {
+
+  @Rule
+  public final BaseDirTestWatcher dirTestWatcher = new BaseDirTestWatcher();
 
   /**
    * Create the sort implementation to be used by test.
@@ -210,7 +215,7 @@ public class TestSortImpl extends DrillTest {
 
   @Test
   public void testNullInput() throws Exception {
-    try (OperatorFixture fixture = OperatorFixture.standardFixture()) {
+    try (OperatorFixture fixture = OperatorFixture.standardFixture(dirTestWatcher)) {
       SortTestFixture sortTest = new SortTestFixture(fixture);
       sortTest.run();
     }
@@ -223,7 +228,7 @@ public class TestSortImpl extends DrillTest {
 
   @Test
   public void testEmptyInput() throws Exception {
-    try (OperatorFixture fixture = OperatorFixture.standardFixture()) {
+    try (OperatorFixture fixture = OperatorFixture.standardFixture(dirTestWatcher)) {
       BatchSchema schema = SortTestUtilities.nonNullSchema();
       SortTestFixture sortTest = new SortTestFixture(fixture);
       sortTest.addInput(fixture.rowSetBuilder(schema)
@@ -239,7 +244,7 @@ public class TestSortImpl extends DrillTest {
 
   @Test
   public void testSingleRow() throws Exception {
-    try (OperatorFixture fixture = OperatorFixture.standardFixture()) {
+    try (OperatorFixture fixture = OperatorFixture.standardFixture(dirTestWatcher)) {
       BatchSchema schema = SortTestUtilities.nonNullSchema();
       SortTestFixture sortTest = new SortTestFixture(fixture);
       sortTest.addInput(fixture.rowSetBuilder(schema)
@@ -259,7 +264,7 @@ public class TestSortImpl extends DrillTest {
 
   @Test
   public void testSingleBatch() throws Exception {
-    try (OperatorFixture fixture = OperatorFixture.standardFixture()) {
+    try (OperatorFixture fixture = OperatorFixture.standardFixture(dirTestWatcher)) {
       BatchSchema schema = SortTestUtilities.nonNullSchema();
       SortTestFixture sortTest = new SortTestFixture(fixture);
       sortTest.addInput(fixture.rowSetBuilder(schema)
@@ -282,7 +287,7 @@ public class TestSortImpl extends DrillTest {
 
   @Test
   public void testTwoBatches() throws Exception {
-    try (OperatorFixture fixture = OperatorFixture.standardFixture()) {
+    try (OperatorFixture fixture = OperatorFixture.standardFixture(dirTestWatcher)) {
       BatchSchema schema = SortTestUtilities.nonNullSchema();
       SortTestFixture sortTest = new SortTestFixture(fixture);
       sortTest.addInput(fixture.rowSetBuilder(schema)
@@ -472,7 +477,7 @@ public class TestSortImpl extends DrillTest {
    */
   @Test
   public void testModerateBatch() throws Exception {
-    try (OperatorFixture fixture = OperatorFixture.standardFixture()) {
+    try (OperatorFixture fixture = OperatorFixture.standardFixture(dirTestWatcher)) {
       runJumboBatchTest(fixture, 1000);
     }
   }
@@ -486,7 +491,7 @@ public class TestSortImpl extends DrillTest {
 
   @Test
   public void testLargeBatch() throws Exception {
-    try (OperatorFixture fixture = OperatorFixture.standardFixture()) {
+    try (OperatorFixture fixture = OperatorFixture.standardFixture(dirTestWatcher)) {
 //      partyOnMemory(fixture.allocator());
       runJumboBatchTest(fixture, ValueVector.MAX_ROW_COUNT);
     }
@@ -567,7 +572,7 @@ public class TestSortImpl extends DrillTest {
 
   @Test
   public void testWideRows() throws Exception {
-    try (OperatorFixture fixture = OperatorFixture.standardFixture()) {
+    try (OperatorFixture fixture = OperatorFixture.standardFixture(dirTestWatcher)) {
       runWideRowsTest(fixture, 1000, ValueVector.MAX_ROW_COUNT);
     }
   }
@@ -587,7 +592,7 @@ public class TestSortImpl extends DrillTest {
 
   @Test
   public void testSpill() throws Exception {
-    OperatorFixture.Builder builder = OperatorFixture.builder();
+    OperatorFixture.Builder builder = OperatorFixture.builder(dirTestWatcher);
     builder.configBuilder()
       .put(ExecConstants.EXTERNAL_SORT_BATCH_LIMIT, 2);
     try (OperatorFixture fixture = builder.build()) {
