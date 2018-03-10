@@ -53,7 +53,9 @@ import org.apache.drill.exec.vector.ValueVector;
 import com.sun.codemodel.JConditional;
 import com.sun.codemodel.JExpr;
 
-
+/**
+ * This is a master class used to generate code for {@link HashTable}s.
+ */
 public class ChainedHashTable {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ChainedHashTable.class);
 
