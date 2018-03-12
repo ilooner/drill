@@ -52,8 +52,8 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- *  The class HashPartition
- *
+ * <h2>Overview</h2>
+ * <p>
  *    Created to represent an active partition for the Hash-Join operator
  *  (active means: currently receiving data, or its data is being probed; as opposed to fully
  *   spilled partitions).
@@ -62,6 +62,7 @@ import java.util.concurrent.TimeUnit;
  *    If all this partition's build/inner data was spilled, then it begins to work as an outer
  *  partition (see the flag "processingOuter") -- reusing some of the fields (e.g., currentBatch,
  *  currHVVector, writer, spillFile, partitionBatchesCount) for the outer.
+ *  </p>
  */
 public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
   static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(HashPartition.class);
@@ -484,7 +485,10 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     hashTable.getStats(newStats);
   }
 
-  public void clearHashTableAndHelper() {
+  /**
+   * Frees memory allocated to the {@link HashTable} and {@link HashJoinHelper}.
+   */
+  private void clearHashTableAndHelper() {
     if (hashTable != null) {
       hashTable.clear();
       hashTable = null;
@@ -513,6 +517,10 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     if ( containers != null ) { containers.clear(); }
   }
 
+  /**
+   * Creates a debugging string containing information about memory usage.
+   * @return A debugging string.
+   */
   public String makeDebugString() {
     return String.format("[hashTable = %s]",
       hashTable == null ? "None": hashTable.makeDebugString());
