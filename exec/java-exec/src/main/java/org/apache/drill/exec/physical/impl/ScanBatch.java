@@ -297,7 +297,7 @@ public class ScanBatch implements CloseableRecordBatch {
       return false;
     }
     currentReader = readers.next();
-    if (readers.hasNext()) {
+    if (!isRepeatableScan && readers.hasNext()) {
       readers.remove();
     }
     implicitValues = implicitColumns.hasNext() ? implicitColumns.next() : null;
