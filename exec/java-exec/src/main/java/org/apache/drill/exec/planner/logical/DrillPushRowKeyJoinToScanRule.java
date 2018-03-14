@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -43,7 +43,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
-
+  static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(DrillPushRowKeyJoinToScanRule.class);
   final public MatchFunction match;
 
   private DrillPushRowKeyJoinToScanRule(RelOptRuleOperand operand, String description, MatchFunction match) {
@@ -93,6 +93,29 @@ public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
           findRelSequenceInternal(classes, idx + 1, rel.getInput(0), matchingRels);
         }
       } else {
+        if (logger.isDebugEnabled()) {
+          String sequence, matchingSequence;
+          StringBuffer sb = new StringBuffer();
+          for (int i = 0; i < classes.length; i++) {
+            if (i == classes.length - 1) {
+              sb.append(classes[i].getCanonicalName().toString());
+            } else {
+              sb.append(classes[i].getCanonicalName().toString() + "->");
+            }
+          }
+          sequence = sb.toString();
+          sb.delete(0, sb.length());
+          for (int i = 0; i < matchingRels.size(); i++) {
+            if (i == matchingRels.size() - 1) {
+              sb.append(matchingRels.get(i).getClass().getCanonicalName().toString());
+            } else {
+              sb.append(matchingRels.get(i).getClass().getCanonicalName().toString() + "->");
+            }
+          }
+          matchingSequence = sb.toString();
+          logger.debug("FindRelSequence: ABORT: Unexpected Rel={}, After={}, CurSeq={}" ,
+              rel.getClass().getCanonicalName().toString() , matchingSequence , sequence);
+        }
         matchingRels.clear();
       }
     }
@@ -111,34 +134,41 @@ public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
       Class[] PS = new Class[] {DrillProjectRel.class, DrillScanRel.class};
       Class[] FS = new Class[] {DrillFilterRel.class, DrillScanRel.class};
       Class[] S = new Class[] {DrillScanRel.class};
-
+      logger.info("GenerateContext(): Primary-key: Side={}, RowTypePos={}, SwapInputs={}",
+          rowKeyLoc.name(), rowKeyPos, swapInputs);
       matchingRels = findRelSequence(PFPS, joinChildRel);
       if (matchingRels.size() > 0) {
+        logger.debug("Matched rel sequence : Project->Filter->Project->Scan");
         return new RowKeyJoinCallContext(call, rowKeyLoc, rowKeyPos, swapInputs, joinRel,
             (DrillProjectRel) matchingRels.get(0), (DrillFilterRel) matchingRels.get(1),
             (DrillProjectRel) matchingRels.get(2), (DrillScanRel) matchingRels.get(3));
       }
       matchingRels = findRelSequence(FPS, joinChildRel);
       if (matchingRels.size() > 0) {
+        logger.debug("Matched rel sequence : Filter->Project->Scan");
         return new RowKeyJoinCallContext(call, rowKeyLoc, rowKeyPos, swapInputs, joinRel,
             null, (DrillFilterRel) matchingRels.get(0), (DrillProjectRel) matchingRels.get(1),
             (DrillScanRel) matchingRels.get(2));
       }
       matchingRels = findRelSequence(PS, joinChildRel);
       if (matchingRels.size() > 0) {
+        logger.debug("Matched rel sequence : Project->Scan");
         return new RowKeyJoinCallContext(call, rowKeyLoc, rowKeyPos, swapInputs, joinRel, null,
             null, (DrillProjectRel) matchingRels.get(0), (DrillScanRel) matchingRels.get(1));
       }
       matchingRels = findRelSequence(FS, joinChildRel);
       if (matchingRels.size() > 0) {
+        logger.debug("Matched rel sequence : Filter->Scan");
         return new RowKeyJoinCallContext(call, rowKeyLoc, rowKeyPos, swapInputs, joinRel, null,
             (DrillFilterRel) matchingRels.get(0), null, (DrillScanRel) matchingRels.get(1));
       }
       matchingRels = findRelSequence(S, joinChildRel);
       if (matchingRels.size() > 0) {
+        logger.debug("Matched rel sequence : Scan");
         return new RowKeyJoinCallContext(call, rowKeyLoc, rowKeyPos, swapInputs, joinRel, null, null,
             null, (DrillScanRel) matchingRels.get(0));
       }
+      logger.debug("Matched rel sequence : None");
       return new RowKeyJoinCallContext(call, RowKey.NONE, -1, false, null, null, null, null, null);
     }
 
@@ -146,6 +176,7 @@ public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
     public boolean match(RelOptRuleCall call) {
       DrillJoinRel joinRel = call.rel(0);
       //Perform validity checks
+      logger.info("DrillPushRowKeyJoinToScanRule begin()");
       return canPushRowKeyJoinToScan(joinRel, call.getPlanner()).left;
     }
 
@@ -222,12 +253,15 @@ public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
    */
   private static Pair<Boolean, Pair<RowKey, Integer>> canPushRowKeyJoinToScan(DrillJoinRel joinRel, RelOptPlanner planner) {
     RowKey rowKeyLoc = RowKey.NONE;
+    logger.info("canPushRowKeyJoinToScan(): Check: Rel={}", joinRel);
 
     if (joinRel instanceof RowKeyJoinRel) {
+      logger.debug("SKIP: Join is a RowKeyJoin");
       return Pair.of(false, Pair.of(rowKeyLoc, -1));
     }
 
     if (joinRel.getJoinType() != JoinRelType.INNER) {
+      logger.debug("SKIP: JoinType={} - NOT an INNER join", joinRel.getJoinType());
       return Pair.of(false, Pair.of(rowKeyLoc, -1));
     }
 
@@ -235,6 +269,8 @@ public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
     if (joinRel.getCondition().getKind() != SqlKind.EQUALS
         || joinRel.getLeftKeys().size() != 1
         || joinRel.getRightKeys().size() != 1) {
+      logger.debug("SKIP: #LeftKeys={}, #RightKeys={} - NOT single predicate join condition",
+          joinRel.getLeftKeys().size(), joinRel.getRightKeys().size());
       return Pair.of(false, Pair.of(rowKeyLoc, -1));
     }
 
@@ -251,12 +287,14 @@ public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
           int pos = ((RexInputRef)op).getIndex();
           if (pos < joinRel.getLeft().getRowType().getFieldList().size()) {
             if (isRowKeyColumn(((RexInputRef) op).getIndex(), joinRel.getLeft())) {
+              logger.info("FOUND Primary-key: Side=LEFT, RowType={}", joinRel.getLeft().getRowType());
               hasLeftRowKeyCol = true;
               leftRowKeyPos = pos;
               break;
             }
           } else {
             if (isRowKeyColumn(pos - joinRel.getLeft().getRowType().getFieldList().size(), joinRel.getRight())) {
+              logger.info("FOUND Primary-key: Side=RIGHT, RowType={}", joinRel.getRight().getRowType());
               hasRightRowKeyCol = true;
               rightRowKeyPos = pos;
               break;
@@ -266,6 +304,7 @@ public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
       }
     }
     if (!hasLeftRowKeyCol && !hasRightRowKeyCol) {
+      logger.debug("SKIP: Primary-key = column condition NOT found");
       return Pair.of(false, Pair.of(rowKeyLoc, -1));
     }
     /* Get the scan rel on left/right side of the join (at least one of them should be non-null for us
@@ -276,6 +315,7 @@ public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
     RelNode rightScan = getValidJoinInput(joinRel.getRight());
 
     if (leftScan == null && rightScan == null) {
+      logger.debug("SKIP: Blocking operators between join and scans");
       return Pair.of(false, Pair.of(rowKeyLoc, -1));
     }
     // Only valid if the side with the primary-key column doesn't not have any blocking operations e.g. aggregates
@@ -294,19 +334,38 @@ public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
     // the HEP planner, it is not costed. Hence, the heuristic to potentially prevent an expensive plan!
     RelMetadataQuery mq = RelMetadataQuery.instance();
     double ncSel = PrelUtil.getPlannerSettings(planner).getRowKeyJoinConversionSelThreshold();
+    double sel;
     if (rowKeyLoc == RowKey.NONE) {
       return Pair.of(false, Pair.of(rowKeyLoc, -1));
     } else if (rowKeyLoc == RowKey.LEFT) {
-      if (joinRel.getRight().estimateRowCount(mq)/leftScan.estimateRowCount(mq) > ncSel) {
+      sel = computeSelectivity(joinRel.getRight().estimateRowCount(mq), leftScan.estimateRowCount(mq));
+      if (sel > ncSel) {
+        logger.debug("SKIP: SEL= {}/{} = {}\\%, THRESHOLD={}\\%",
+            joinRel.getRight().estimateRowCount(mq), leftScan.estimateRowCount(mq), sel*100.0, ncSel*100.0);
         return Pair.of(false, Pair.of(rowKeyLoc, -1));
       }
     } else {
-      if (joinRel.getLeft().estimateRowCount(mq)/rightScan.estimateRowCount(mq) > ncSel) {
+      sel = computeSelectivity(joinRel.getLeft().estimateRowCount(mq), rightScan.estimateRowCount(mq));
+      if (sel > ncSel) {
+        logger.debug("SKIP: SEL= {}/{} = {}\\%, THRESHOLD={}\\%",
+            joinRel.getLeft().estimateRowCount(mq), rightScan.estimateRowCount(mq), sel*100.0, ncSel*100.0);
         return Pair.of(false, Pair.of(rowKeyLoc, -1));
       }
     }
     int rowKeyPos = rowKeyLoc == RowKey.RIGHT ? rightRowKeyPos : leftRowKeyPos;
+    logger.info("FOUND Primary-key: Side={}, RowTypePos={}, Sel={}, Threshold={}",
+        rowKeyLoc.name(), rowKeyPos, sel, ncSel);
     return Pair.of(true, Pair.of(rowKeyLoc, rowKeyPos));
+  }
+
+  /*
+   * Computes the selectivity given the number of rows selected from the total rows
+   */
+  private static double computeSelectivity(double selectRows, double totalRows) {
+    if (totalRows <= 0) {
+      return 1.0;
+    }
+    return Math.min(1.0, Math.max(0.0, selectRows/totalRows));
   }
 
   /* Finds the scan rel underlying the given rel. No blocking operators should
@@ -348,6 +407,8 @@ public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
     RelNode curRel = rel;
     int curIndex = index;
     while (curRel != null && !(curRel instanceof DrillScanRel)) {
+      logger.debug("IsRowKeyColumn: Rel={}, RowTypePos={}, RowType={}", curRel.toString(), curIndex,
+          curRel.getRowType().toString());
       if (curRel instanceof HepRelVertex) {
         curRel = ((HepRelVertex) curRel).getCurrentRel();
       } else if (curRel instanceof RelSubset) {
@@ -380,11 +441,14 @@ public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
           } else {
             // Currently do not support expressions on rowkey col. So if an expr is present,
             // return false
+            logger.debug("IsRowKeyColumn: ABORT: Primary-key EXPR$={}", childExprs.get(curIndex).toString());
             return false;
           }
         }
       }
     }
+    logger.debug("IsRowKeyColumn:Primary-key Col={} ",
+        curRel != null ? curRel.getRowType().getFieldNames().get(curIndex) : "??");
     // Get the primary-key col name from the scan and match with the column being referenced.
     if (curRel != null && curRel instanceof DrillScanRel) {
       if (((DrillScanRel) curRel).getGroupScan() instanceof DbGroupScan) {
@@ -394,10 +458,13 @@ public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
         // Also verify this scan supports restricted groupscans(random seeks)
         if (restrictedGroupScan != null &&
             curRel.getRowType().getFieldNames().get(curIndex).equalsIgnoreCase(rowKeyName)) {
+          logger.info("IsRowKeyColumn: FOUND: Rel={}, RowTypePos={}, RowType={}",
+              curRel.toString(), curIndex, curRel.getRowType().toString());
           return true;
         }
       }
     }
+    logger.info("IsRowKeyColumn: NOT FOUND");
     return false;
   }
 
@@ -412,6 +479,7 @@ public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
   private void doOnMatch(RelOptRuleCall call, int rowKeyPosition, boolean swapInputs, DrillJoinRel joinRel,
       DrillProjectRel upperProjectRel, DrillFilterRel filterRel, DrillProjectRel lowerProjectRel, DrillScanRel scanRel) {
     // Swap the inputs, when necessary (i.e. when the primary-key col is on the right-side of the join)
+    logger.debug("Transforming: Swapping of join inputs is required!");
     RelNode right = swapInputs ? joinRel.getLeft() : joinRel.getRight();
     // The join condition is primary-key = COL similarly to PK-FK relationship in relational DBs
     // where primary-key is PK and COL is FK
@@ -436,8 +504,11 @@ public class DrillPushRowKeyJoinToScanRule extends RelOptRule {
     RexNode joinCondition =
         RelOptUtil.createEquiJoinCondition(leftRel, leftJoinKeys,
             right, rightJoinKeys, joinRel.getCluster().getRexBuilder());
+    logger.debug("Transforming: LeftKeys={}, LeftRowType={}, RightKeys={}, RightRowType={}",
+        leftJoinKeys, leftRel.getRowType(), rightJoinKeys, right.getRowType());
     RowKeyJoinRel rowKeyJoin = new RowKeyJoinRel(joinRel.getCluster(), joinRel.getTraitSet(), leftRel, right,
         joinCondition, joinRel.getJoinType());
+    logger.info("Transforming: SUCCESS: Register runtime filter pushdown plan via rowkeyjoin plan!");
     call.transformTo(rowKeyJoin);
   }
 }
