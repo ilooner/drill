@@ -215,6 +215,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       return false;
     }
 
+    state = BatchState.FIRST;  // Got our first batches on both sides
     return true;
   }
 
@@ -355,7 +356,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           }
           logger.debug("Start reading spilled partition {} (prev {}) from cycle {} (with {}-{} batches). More {} spilled partitions left.", currSp.origPartn, currSp.prevOrigPartn, currSp.cycleNum, currSp.outerSpilledBatches, currSp.innerSpilledBatches, spilledPartitionsList.size());
 
-          state = BatchState.FIRST;  // build again, initialize probe, etc
+          state = BatchState.FIRST;  // TODO need to determine if this is still necessary since prefetchFirstBatchFromBothSides sets this
 
           return innerNext(); // start processing the next spilled partition "recursively"
         }
