@@ -97,10 +97,20 @@ public abstract class MapRDBPushLimitIntoScan extends StoragePluginOptimizerRule
 
     @Override
     public boolean matches(RelOptRuleCall call) {
-      final LimitPrel limit = call.rel(0);
-      // We do not fire this rule if fetch() is null (indicating we have to fetch all the
-      // remaining rows starting from offset.
-      return !limit.isPushDown() && limit.getFetch() != null;
+      LimitPrel limitPrel = call.rel(0);
+      ProjectPrel projectPrel = call.rel(1);
+      // pushdown only apply limit but not offset,
+      // so if getFetch() return null no need to run this rule.
+      // Do not push across Project containing CONVERT_FROMJSON for limit 0 queries. For limit 0 queries, this would
+      // mess up the schema since Convert_FromJson() is different from other regular functions in that it only knows
+      // the output schema after evaluation is performed. When input has 0 row, Drill essentially does not have a way
+      // to know the output type.
+      if (!limitPrel.isPushDown() && (limitPrel.getFetch() != null)
+          && (!DrillRelOptUtil.isLimit0(limitPrel.getFetch())
+          || !DrillRelOptUtil.isProjectOutputSchemaUnknown(projectPrel))) {
+        return true;
+      }
+      return false;
     }
   };
 

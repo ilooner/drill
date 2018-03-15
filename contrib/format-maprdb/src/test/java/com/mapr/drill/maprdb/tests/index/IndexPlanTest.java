@@ -1623,6 +1623,21 @@ public class IndexPlanTest extends BaseJsonTest {
   }
 
   @Test
+  public void testLimit0Pushdown() throws Exception {
+    // Limit pushdown should NOT happen past project with CONVERT_FROMJSON
+    String query = "select convert_from(convert_to(t.`name`.`lname`, 'JSON'), 'JSON') " +
+        "from hbase.`index_test_primary` as t limit 0";
+    try {
+      test(defaultHavingIndexPlan + ";");
+      PlanTestBase.testPlanWithAttributesMatchingPatterns(query,
+          new String[]{"Limit(.*[\n\r])+.*Project.*CONVERT_FROMJSON(.*[\n\r])+.*Scan"},
+          new String[]{}
+      );
+    } finally {
+    }
+  }
+
+  @Test
   public void testRemovalOfReduntantHashToMergeExchange() throws Exception {
     String query = "SELECT t.driverlicense as lic FROM hbase.`index_test_primary` as t " +
             "order by t.driverlicense limit 2";
