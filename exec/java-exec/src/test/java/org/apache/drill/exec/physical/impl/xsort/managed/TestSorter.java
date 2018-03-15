@@ -47,6 +47,7 @@ import org.apache.drill.test.rowSet.RowSetUtilities;
 import org.joda.time.Period;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
@@ -63,7 +64,7 @@ public class TestSorter extends DrillTest {
 
   public static OperatorFixture fixture;
 
-  @Rule
+  @ClassRule
   public static final BaseDirTestWatcher dirTestWatcher = new BaseDirTestWatcher();
 
   @BeforeClass
