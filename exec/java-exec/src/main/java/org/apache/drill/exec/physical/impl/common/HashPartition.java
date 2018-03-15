@@ -488,7 +488,7 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
   /**
    * Frees memory allocated to the {@link HashTable} and {@link HashJoinHelper}.
    */
-  private void clearHashTableAndHelper() {
+  public void clearHashTableAndHelper() {
     if (hashTable != null) {
       hashTable.clear();
       hashTable = null;
