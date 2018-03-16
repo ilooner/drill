@@ -21,6 +21,8 @@ package org.apache.drill.exec.planner.logical;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptRuleCall;
+import org.apache.calcite.plan.RelOptUtil;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.rules.ProjectMergeRule;
 import org.apache.drill.exec.expr.fn.FunctionImplementationRegistry;
@@ -28,6 +30,9 @@ import org.apache.calcite.rel.core.RelFactories.ProjectFactory;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexNode;
 import org.apache.drill.exec.planner.DrillRelBuilder;
+import org.apache.drill.exec.planner.physical.PrelFactories;
+
+import java.util.List;
 
 public class DrillMergeProjectRule extends ProjectMergeRule {
 
@@ -77,4 +82,26 @@ public class DrillMergeProjectRule extends ProjectMergeRule {
     }
     return false;
   }
+
+  public static Project replace(Project topProject, Project bottomProject) {
+    final List<RexNode> newProjects =
+        RelOptUtil.pushPastProject(topProject.getProjects(), bottomProject);
+
+    // replace the two projects with a combined projection
+    if(topProject instanceof DrillProjectRel) {
+      RelNode newProjectRel = DrillRelFactories.DRILL_LOGICAL_PROJECT_FACTORY.createProject(
+          bottomProject.getInput(), newProjects,
+          topProject.getRowType().getFieldNames());
+
+      return (Project) newProjectRel;
+    }
+    else {
+      RelNode newProjectRel = PrelFactories.PROJECT_FACTORY.createProject(
+          bottomProject.getInput(), newProjects,
+          topProject.getRowType().getFieldNames());
+
+      return (Project) newProjectRel;
+    }
+  }
+
 }

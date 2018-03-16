@@ -87,5 +87,11 @@ public class FileSystemConfig extends StoragePluginConfig {
     return true;
   }
 
-
+  @Override
+  public String getValue(String key) {
+    if (config != null) {
+      return config.get(key);
+    }
+    return null;
+  }
 }

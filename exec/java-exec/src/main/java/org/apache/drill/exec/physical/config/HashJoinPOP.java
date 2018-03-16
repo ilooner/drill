@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,6 +25,7 @@ import org.apache.drill.common.logical.data.JoinCondition;
 import org.apache.drill.exec.physical.base.AbstractBase;
 import org.apache.drill.exec.physical.base.PhysicalOperator;
 import org.apache.drill.exec.physical.base.PhysicalVisitor;
+import org.apache.drill.exec.physical.base.SubScan;
 import org.apache.drill.exec.proto.UserBitShared.CoreOperatorType;
 import org.apache.calcite.rel.core.JoinRelType;
 
@@ -44,19 +45,38 @@ public class HashJoinPOP extends AbstractBase {
     private final PhysicalOperator right;
     private final List<JoinCondition> conditions;
     private final JoinRelType joinType;
+    private final boolean isRowKeyJoin;
+    private final int joinControl;
+
+    @JsonProperty("subScanForRowKeyJoin")
+    private SubScan subScanForRowKeyJoin;
+
+    public HashJoinPOP(
+        PhysicalOperator left,
+        PhysicalOperator right,
+        List<JoinCondition> conditions,
+        JoinRelType joinType
+    ) {
+        this(left, right, conditions, joinType, false, 0);
+    }
 
     @JsonCreator
     public HashJoinPOP(
-            @JsonProperty("left") PhysicalOperator left,
-            @JsonProperty("right") PhysicalOperator right,
-            @JsonProperty("conditions") List<JoinCondition> conditions,
-            @JsonProperty("joinType") JoinRelType joinType
+        @JsonProperty("left") PhysicalOperator left,
+        @JsonProperty("right") PhysicalOperator right,
+        @JsonProperty("conditions") List<JoinCondition> conditions,
+        @JsonProperty("joinType") JoinRelType joinType,
+        @JsonProperty("isRowKeyJoin") boolean isRowKeyJoin,
+        @JsonProperty("joinControl") int joinControl
     ) {
         this.left = left;
         this.right = right;
         this.conditions = conditions;
         Preconditions.checkArgument(joinType != null, "Join type is missing!");
         this.joinType = joinType;
+        this.isRowKeyJoin = isRowKeyJoin;
+        this.subScanForRowKeyJoin = null;
+        this.joinControl = joinControl;
     }
 
     @Override
@@ -67,7 +87,9 @@ public class HashJoinPOP extends AbstractBase {
     @Override
     public PhysicalOperator getNewWithChildren(List<PhysicalOperator> children) {
         Preconditions.checkArgument(children.size() == 2);
-        return new HashJoinPOP(children.get(0), children.get(1), conditions, joinType);
+        HashJoinPOP hj = new HashJoinPOP(children.get(0), children.get(1), conditions, joinType, isRowKeyJoin, joinControl);
+        hj.setSubScanForRowKeyJoin(this.getSubScanForRowKeyJoin());
+        return hj;
     }
 
     @Override
@@ -91,13 +113,32 @@ public class HashJoinPOP extends AbstractBase {
         return conditions;
     }
 
+    @JsonProperty("isRowKeyJoin")
+    public boolean isRowKeyJoin() {
+        return isRowKeyJoin;
+    }
+
+    @JsonProperty("joinControl")
+    public int getJoinControl() {
+        return joinControl;
+    }
+
+    @JsonProperty("subScanForRowKeyJoin")
+    public SubScan getSubScanForRowKeyJoin() {
+        return subScanForRowKeyJoin;
+    }
+
+    public void setSubScanForRowKeyJoin(SubScan subScan) {
+        this.subScanForRowKeyJoin = subScan;
+    }
+
     public HashJoinPOP flipIfRight(){
         if(joinType == JoinRelType.RIGHT){
             List<JoinCondition> flippedConditions = Lists.newArrayList();
             for(JoinCondition c : conditions){
                 flippedConditions.add(c.flip());
             }
-            return new HashJoinPOP(right, left, flippedConditions, JoinRelType.LEFT);
+            return new HashJoinPOP(right, left, flippedConditions, JoinRelType.LEFT, isRowKeyJoin, joinControl);
         }else{
             return this;
         }
@@ -105,6 +146,6 @@ public class HashJoinPOP extends AbstractBase {
 
     @Override
     public int getOperatorType() {
-      return CoreOperatorType.HASH_JOIN_VALUE;
+        return CoreOperatorType.HASH_JOIN_VALUE;
     }
 }

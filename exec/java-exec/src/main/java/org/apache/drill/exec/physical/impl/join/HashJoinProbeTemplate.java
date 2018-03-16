@@ -25,7 +25,9 @@ import javax.inject.Named;
 import org.apache.drill.exec.exception.ClassTransformationException;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.ops.FragmentContext;
+import org.apache.drill.exec.physical.config.HashJoinPOP;
 import org.apache.drill.exec.physical.impl.common.HashTable;
+import org.apache.drill.exec.planner.common.JoinControl;
 import org.apache.drill.exec.record.BatchSchema;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.RecordBatch.IterOutcome;
@@ -44,6 +46,10 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
 
   // Join type, INNER, LEFT, RIGHT or OUTER
   private JoinRelType joinType;
+
+  //joinControl object derived from the int type joinControl passed from outgoingBatch(HashJoinBatch)
+  //so we can do different things in hashtable for INTERSECT_DISTINCT and INTERSECT_ALL
+  private JoinControl joinControl;
 
   private HashJoinBatch outgoingJoinBatch = null;
 
@@ -93,6 +99,7 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
     this.hashTable = hashTable;
     this.hjHelper = hjHelper;
     this.outgoingJoinBatch = outgoing;
+    joinControl = new JoinControl(((HashJoinPOP)outgoingJoinBatch.getPopConfig()).getJoinControl());
 
     if (leftStartState == IterOutcome.NONE) {
       if (joinRelType == JoinRelType.RIGHT) {
@@ -180,7 +187,14 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
              * side. Set the bit corresponding to this index so if we are doing a FULL or RIGHT
              * join we keep track of which records we need to project at the end
              */
-            hjHelper.setRecordMatched(currentCompositeIdx);
+            boolean alreadyExist = hjHelper.setRecordMatched(currentCompositeIdx);
+
+            if( joinControl.isIntersectDistinct() && alreadyExist ) {
+              //since it is distinct and we already have one record matched, move to next probe row
+              getNextRecord = true;
+              recordsProcessed++;
+              continue;
+            }
 
             projectBuildRecord(currentCompositeIdx, outputRecords);
             projectProbeRecord(recordsProcessed, outputRecords);
@@ -211,6 +225,7 @@ public abstract class HashJoinProbeTemplate implements HashJoinProbe {
             recordsProcessed++;
           }
       } else {
+        //in intersect_distinct case, we should never be here
         hjHelper.setRecordMatched(currentCompositeIdx);
         projectBuildRecord(currentCompositeIdx, outputRecords);
         projectProbeRecord(recordsProcessed, outputRecords);

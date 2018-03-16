@@ -22,6 +22,7 @@ import java.util.Iterator;
 
 import javax.inject.Named;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.drill.common.types.TypeProtos.MinorType;
 import org.apache.drill.common.types.Types;
 import org.apache.drill.exec.compile.sig.RuntimeOverridden;
@@ -100,6 +101,7 @@ public abstract class HashTableTemplate implements HashTable {
   private int resizingTime = 0;
 
   private int maxVarcharSize = 8; // for varchar allocation
+  private Iterator<BatchHolder> htIter = null;
 
   // This class encapsulates the links, keys and values for up to BATCH_SIZE
   // *unique* records. Thus, suppose there are N incoming record batches, each
@@ -806,6 +808,26 @@ public abstract class HashTableTemplate implements HashTable {
 
   @Override
   public void setMaxVarcharSize(int size) { maxVarcharSize = size; }
+
+  public Pair<VectorContainer, Integer> nextBatch() {
+    if (batchHolders == null || batchHolders.size() == 0) {
+      return null;
+    }
+    if (htIter == null) {
+      htIter = batchHolders.iterator();
+    }
+    if (htIter.hasNext()) {
+      BatchHolder bh = htIter.next();
+      // set the value count for the vectors in the batch
+      // TODO: investigate why the value count is not already set in the
+      // batch.. it seems even outputKeys() sets the value count explicitly
+      if (bh != null) {
+        bh.setValueCount();
+        return Pair.of(bh.htContainer, bh.maxOccupiedIdx);
+      }
+    }
+    return null;
+  }
 
   // These methods will be code-generated in the context of the outer class
   protected abstract void doSetup(@Named("incomingBuild") RecordBatch incomingBuild, @Named("incomingProbe") RecordBatch incomingProbe) throws SchemaChangeException;

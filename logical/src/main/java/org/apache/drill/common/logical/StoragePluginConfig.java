@@ -22,7 +22,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property="type")
-public abstract class StoragePluginConfig{
+public abstract class StoragePluginConfig {
 
   private boolean enabled = true;
 
@@ -39,5 +39,9 @@ public abstract class StoragePluginConfig{
 
   @Override
   public abstract int hashCode();
+
+  public String getValue(String key) {
+    return null;
+  }
 
 }
