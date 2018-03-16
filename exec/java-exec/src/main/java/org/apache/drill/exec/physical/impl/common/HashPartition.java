@@ -18,7 +18,6 @@
 package org.apache.drill.exec.physical.impl.common;
 
 import org.apache.commons.lang3.tuple.Pair;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import org.apache.drill.common.exceptions.RetryAfterSpillException;
 import org.apache.drill.common.exceptions.UserException;
@@ -107,7 +106,7 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
 
   private BufferAllocator allocator;
   private int RECORDS_PER_BATCH;
-  ChainedHashTable baseHashTable;
+  private ChainedHashTable baseHashTable;
   private SpillSet spillSet;
   private boolean isSpilled; // is this partition spilled ?
   private boolean processingOuter; // is (inner done spilling and) now the outer is processed?
@@ -454,6 +453,7 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     containers = new ArrayList<>();
     for (int curr = 0; curr < partitionBatchesCount; curr++) {
       VectorContainer nextBatch = tmpBatchesList.get(curr);
+      assert nextBatch != null;
       final int currentRecordCount = nextBatch.getRecordCount();
 
       // For every incoming build batch, we create a matching helper batch
@@ -462,7 +462,6 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
       // Holder contains the global index where the key is hashed into using the hash table
       final IndexPointer htIndex = new IndexPointer();
 
-      assert nextBatch != null;
       assert probeBatch != null;
 
       hashTable.updateIncoming(nextBatch, probeBatch );

@@ -36,7 +36,7 @@ import org.apache.drill.test.rowSet.RowSetBuilder;
 import org.apache.drill.test.rowSet.schema.SchemaBuilder;
 import org.junit.Test;
 
-public class TestRecordBatchSizer extends SubOperatorTest {
+public class TestHashJoinRecordBatchSizer extends SubOperatorTest {
   private final int testRowCount = 1000;
   private final int testRowCountPowerTwo = 2048;
 

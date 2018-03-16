@@ -22,13 +22,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import org.apache.drill.exec.record.VectorContainer;
 
 import com.google.common.collect.Lists;
-import com.sun.codemodel.JExpr;
-import com.sun.codemodel.JExpression;
-import com.sun.codemodel.JVar;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.commons.lang3.tuple.Pair;
 import com.google.common.collect.Sets;
@@ -59,10 +55,7 @@ import org.apache.drill.exec.physical.impl.common.Comparator;
 import org.apache.drill.exec.physical.impl.common.HashTable;
 import org.apache.drill.exec.physical.impl.common.HashTableConfig;
 import org.apache.drill.exec.physical.impl.common.HashTableStats;
-import org.apache.drill.exec.physical.impl.common.IndexPointer;
-import org.apache.drill.exec.physical.impl.sort.RecordBatchData;
 import org.apache.drill.exec.planner.common.JoinControl;
-import org.apache.drill.exec.physical.impl.common.Comparator;
 import org.apache.drill.exec.physical.impl.common.HashPartition;
 import org.apache.drill.exec.physical.impl.spill.SpillSet;
 import org.apache.drill.exec.record.AbstractBinaryRecordBatch;
@@ -74,10 +67,26 @@ import org.apache.drill.exec.vector.IntVector;
 import org.apache.drill.exec.vector.ValueVector;
 import org.apache.drill.exec.vector.complex.AbstractContainerVector;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-
+/**
+ *   This class implements the runtime execution for the Hash-Join operator
+ *   supporting INNER, LEFT OUTER, RIGHT OUTER, and FULL OUTER joins
+ *
+ *   This implementation splits the incoming Build side rows into multiple Partitions, thus allowing spilling of
+ *   some of these partitions to disk if memory gets tight. Each partition is implemented as a {@link HashPartition}.
+ *   After the build phase is over, in the most general case, some of the partitions were spilled, and the others
+ *   are in memory. Each of the partitions in memory would get a {@link HashTable} built.
+ *      Next the Probe side is read, and each row is key matched with a Build partition. If that partition is in
+ *   memory, then the key is used to probe and perform the join, and the results are added to the outgoing batch.
+ *   But if that build side partition was spilled, then the matching Probe size partition is spilled as well.
+ *      After all the Probe side was processed, we are left with pairs of spilled partitions. Then each pair is
+ *   processed individually (that Build partition should be smaller than the original, hence likely fit whole into
+ *   memory to allow probing; if not -- see below).
+ *      Processing of each spilled pair is EXACTLY like processing the original Build/Probe incomings. (As a fact,
+ *   the {@Link #innerNext() innerNext} method calls itself recursively !!). Thus the spilled build partition is
+ *   read and divided into new partitions, which in turn may spill again (and again...).
+ *   The code tracks these spilling "cycles". Normally any such "again" (i.e. cycle of 2 or greater) is a waste,
+ *   indicating that the number of partitions chosen was too small.
+ */
 public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> implements RowKeyJoin {
 
   protected static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(HashJoinBatch.class);
@@ -126,14 +135,14 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> implem
   /**
    * This array holds the currently active {@link HashPartition}s.
    */
-  HashPartition partitions[];
+  private HashPartition partitions[];
 
   // Number of records in the output container
   private int outputRecords;
 
   // Schema of the build side
   // Whether this HashJoin is used for a row-key based join
-  private boolean isRowKeyJoin = false;
+  private boolean isRowKeyJoin;
 
   private JoinControl joinControl;
 
@@ -141,15 +150,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> implem
   private boolean buildComplete = false;
 
   // indicates if we have previously returned an output batch
-  boolean firstOutputBatch = true;
-  private int htIndex = 0;
-
-  private final HashTableStats htStats = new HashTableStats();
-
-  private final MajorType HVtype = MajorType.newBuilder()
-    .setMinorType(org.apache.drill.common.types.TypeProtos.MinorType.INT /* dataType */ )
-    .setMode(DataMode.REQUIRED /* mode */ )
-    .build();
+  private boolean firstOutputBatch = true;
 
   private BatchSchema rightSchema;
 
@@ -161,11 +162,11 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> implem
 
   // For handling spilling
   private SpillSet spillSet;
-  HashJoinPOP popConfig;
+  private HashJoinPOP popConfig;
 
   private int cycleNum = 0; // primary, secondary, tertiary, etc.
   private int originalPartition = -1; // the partition a secondary reads from
-  IntVector read_HV_vector; // HV vector that was read from the spilled batch
+  private IntVector read_HV_vector; // HV vector that was read from the spilled batch
   private int maxBatchesInMemory;
 
   /**
@@ -318,7 +319,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> implem
     if (maxBatchesInMemory == 0) {
       return new HashJoinMemoryCalculatorImpl();
     } else {
-      return new MechanicalHashJoinMemoryCalculator(maxBatchesInMemory);
+      return new HashJoinMechanicalMemoryCalculator(maxBatchesInMemory);
     }
   }
 
@@ -503,16 +504,9 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> implem
     //
     //  Find out the estimated max batch size, etc
     //  and compute the max numPartitions possible
+    //  See partitionNumTuning()
     //
-    // numPartitions = 8; // just for initial work; change later
-    // partitionMask = 7;
-    // bitsInMask = 3;
 
-    //  SET FROM CONFIGURATION OPTIONS :
-    //  ================================
-
-    // Set the number of partitions from the configuration (raise to a power of two, if needed)
-    // Based on the number of partitions: Set the mask and bit count
     partitionMask = numPartitions - 1; // e.g. 32 --> 0x1F
     bitsInMask = Integer.bitCount(partitionMask); // e.g. 0x1F -> 5
 
@@ -814,8 +808,19 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> implem
     return spilledInners[part] != null;
   }
 
-  public HashJoinBatch(HashJoinPOP popConfig, FragmentContext context, RecordBatch left,
-                       RecordBatch right) throws OutOfMemoryException {
+  /**
+   *  The constructor
+   *
+   * @param popConfig
+   * @param context
+   * @param left  -- probe/outer side incoming input
+   * @param right -- build/iner side incoming input
+   * @throws OutOfMemoryException
+   */
+  public HashJoinBatch(HashJoinPOP popConfig, FragmentContext context,
+      RecordBatch left, /*Probe side record batch*/
+      RecordBatch right /*Build side record batch*/
+  ) throws OutOfMemoryException {
     super(popConfig, context, true, left, right);
     this.buildBatch = right;
     this.probeBatch = left;
@@ -840,6 +845,11 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> implem
     if ( numPartitions == 1 ) { //
       canSpill = false;
       logger.warn("Spilling is disabled due to configuration setting of num_partitions to 1");
+    }
+    // row-key join can not yet work with spilling - thus RKJ disables spilling
+    if ( isRowKeyJoin ) {
+      numPartitions = 1;
+      canSpill = false;
     }
 
     numPartitions = BaseAllocator.nextPowerOfTwo(numPartitions); // in case not a power of 2
@@ -982,18 +992,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> implem
   @Override   // implement RowKeyJoin interface
   public Pair<ValueVector, Integer> nextRowKeyBatch() {
     if (buildComplete) {
-      Pair<VectorContainer, Integer> pp = null;
-      while ( pp == null ) {
-        pp = partitions[htIndex].nextBatch();
-        if (pp == null) {
-          do {
-            htIndex++;
-          } while ( htIndex < numPartitions && partitions[htIndex].isSpilled() );  // continue with the next non-spilled partition
-          if (htIndex >= numPartitions) { // passed the last partition ?
-           break;
-          }
-        }
-      }
+      // partition 0 because Row Key Join has only a single partition - no spilling
+      Pair<VectorContainer, Integer> pp = partitions[0].nextBatch();
       if (pp != null) {
         VectorWrapper<?> vw = Iterables.get(pp.getLeft(), 0);
         ValueVector vv = vw.getValueVector();

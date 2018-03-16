@@ -113,7 +113,7 @@ public class HashPartitionTest {
         hashPartition.appendInnerRow(buildRowSet.container(), 1, 11, noopCalc);
         hashPartition.appendInnerRow(buildRowSet.container(), 2, 12, noopCalc);
         hashPartition.completeAnInnerBatch(false, false);
-        hashPartition.buildContainersHashTableAndHelper();
+        hashPartition.buildContainersHashTableAndHelper(false);
 
         {
           int compositeIndex = hashPartition.probeForKey(0, 16);
