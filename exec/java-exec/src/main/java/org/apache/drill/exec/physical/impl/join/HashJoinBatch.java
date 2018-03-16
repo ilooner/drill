@@ -258,7 +258,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     if (maxBatchesInMemory == 0) {
       return new HashJoinMemoryCalculatorImpl();
     } else {
-      return new MechanicalHashJoinMemoryCalculator(maxBatchesInMemory);
+      return new HashJoinMechanicalMemoryCalculator(maxBatchesInMemory);
     }
   }
 
