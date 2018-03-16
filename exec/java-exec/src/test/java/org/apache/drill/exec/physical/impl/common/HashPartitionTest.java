@@ -53,6 +53,7 @@ import org.apache.drill.test.rowSet.RowSetBatch;
 import org.apache.drill.test.rowSet.RowSetBuilder;
 import org.apache.drill.test.rowSet.RowSetComparison;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 
@@ -111,7 +112,8 @@ public class HashPartitionTest {
           10,
           spillSet,
           0,
-          0);
+          0,
+          2); // only '1' has a special treatment
 
         final HashJoinMemoryCalculator.BuildSidePartitioning noopCalc = new HashJoinMemoryCalculatorImpl.NoopBuildSidePartitioningImpl();
 
@@ -206,7 +208,8 @@ public class HashPartitionTest {
           10,
           spillSet,
           0,
-          0);
+          0,
+          2);
 
         final HashJoinMemoryCalculator.BuildSidePartitioning noopCalc = new HashJoinMemoryCalculatorImpl.NoopBuildSidePartitioningImpl();
 

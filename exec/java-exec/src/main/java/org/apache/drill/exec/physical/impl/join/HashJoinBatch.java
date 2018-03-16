@@ -64,7 +64,24 @@ import org.apache.drill.exec.vector.complex.AbstractContainerVector;
 import org.apache.calcite.rel.core.JoinRelType;
 
 /**
+ *   This class implements the runtime execution for the Hash-Join operator
+ *   supporting INNER, LEFT OUTER, RIGHT OUTER, and FULL OUTER joins
  *
+ *   This implementation splits the incoming Build side rows into multiple Partitions, thus allowing spilling of
+ *   some of these partitions to disk if memory gets tight. Each partition is implemented as a {@link HashPartition}.
+ *   After the build phase is over, in the most general case, some of the partitions were spilled, and the others
+ *   are in memory. Each of the partitions in memory would get a {@link HashTable} built.
+ *      Next the Probe side is read, and each row is key matched with a Build partition. If that partition is in
+ *   memory, then the key is used to probe and perform the join, and the results are added to the outgoing batch.
+ *   But if that build side partition was spilled, then the matching Probe size partition is spilled as well.
+ *      After all the Probe side was processed, we are left with pairs of spilled partitions. Then each pair is
+ *   processed individually (that Build partition should be smaller than the original, hence likely fit whole into
+ *   memory to allow probing; if not -- see below).
+ *      Processing of each spilled pair is EXACTLY like processing the original Build/Probe incomings. (As a fact,
+ *   the {@Link #innerNext() innerNext} method calls itself recursively !!). Thus the spilled build partition is
+ *   read and divided into new partitions, which in turn may spill again (and again...).
+ *   The code tracks these spilling "cycles". Normally any such "again" (i.e. cycle of 2 or greater) is a waste,
+ *   indicating that the number of partitions chosen was too small.
  */
 public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   protected static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(HashJoinBatch.class);
@@ -263,12 +280,19 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
       return new HashJoinMemoryCalculatorImpl(safetyFactor, fragmentationFactor, hashTableDoublingFactor, hashTableCalculatorType);
     } else {
-      return new MechanicalHashJoinMemoryCalculator(maxBatchesInMemory);
+      return new HashJoinMechanicalMemoryCalculator(maxBatchesInMemory);
     }
   }
 
   @Override
   public IterOutcome innerNext() {
+    // In case incoming was killed before, just cleanup and return
+    if ( wasKilled ) {
+      this.cleanup();
+      super.close();
+      return IterOutcome.NONE;
+    }
+
     try {
       /* If we are here for the first time, execute the build phase of the
        * hash join and setup the run time generated class for the probe side
@@ -278,12 +302,11 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         executeBuildPhase();
         // Update the hash table related stats for the operator
         updateStats();
-        //
+        // Initialize various settings for the probe side
         setupProbe();
       }
 
-      // Store the number of records projected
-
+      // Try to probe and project, or recursively handle a spilled partition
       if ( ! buildSideIsEmpty ||  // If there are build-side rows
            joinType != JoinRelType.INNER) {  // or if this is a left/full outer join
 
@@ -312,13 +335,13 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         // Free all partitions' in-memory data structures
         // (In case need to start processing spilled partitions)
         for ( HashPartition partn : partitions ) {
-          partn.close();
+          partn.cleanup(false); // clean, but do not delete the spill files !!
         }
 
         //
         //  (recursively) Handle the spilled partitions, if any
         //
-        if ( !buildSideIsEmpty && !wasKilled && !spilledPartitionsList.isEmpty()) {
+        if ( !buildSideIsEmpty && !spilledPartitionsList.isEmpty()) {
           // Get the next (previously) spilled partition to handle as incoming
           HJSpilledPartition currSp = spilledPartitionsList.remove(0);
 
@@ -439,16 +462,9 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     //
     //  Find out the estimated max batch size, etc
     //  and compute the max numPartitions possible
+    //  See partitionNumTuning()
     //
-    // numPartitions = 8; // just for initial work; change later
-    // partitionMask = 7;
-    // bitsInMask = 3;
 
-    //  SET FROM CONFIGURATION OPTIONS :
-    //  ================================
-
-    // Set the number of partitions from the configuration (raise to a power of two, if needed)
-    // Based on the number of partitions: Set the mask and bit count
     partitionMask = numPartitions - 1; // e.g. 32 --> 0x1F
     bitsInMask = Integer.bitCount(partitionMask); // e.g. 0x1F -> 5
 
@@ -469,7 +485,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     // Recreate the partitions every time build is initialized
     for (int part = 0; part < numPartitions; part++ ) {
       partitions[part] = new HashPartition(context, allocator, baseHashTable, buildBatch, probeBatch,
-        RECORDS_PER_BATCH, spillSet, part, cycleNum);
+        RECORDS_PER_BATCH, spillSet, part, cycleNum, numPartitions);
     }
 
     spilledInners = new HJSpilledPartition[numPartitions];
@@ -524,12 +540,35 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         TARGET_RECORDS_PER_BATCH,
         HashTable.DEFAULT_LOAD_FACTOR);
 
-      numPartitions = 1; // We are only using one partition
-      canSpill = false; // We cannot spill
-      allocator.setLimit(AbstractBase.MAX_ALLOCATION); // Violate framework and force unbounded memory
+      disableSpilling(null);
     }
 
     return buildCalc;
+  }
+
+  /**
+   *  Disable spilling - use only a single partition and set the memory limit to the max ( 10GB )
+   *  @param reason If not null - log this as warning, else check fallback setting to either warn or fail.
+   */
+  private void disableSpilling(String reason) {
+    // Fail, or just issue a warning if a reason was given, or a fallback option is enabled
+    if ( reason == null ) {
+      final boolean fallbackEnabled = context.getOptions().getOption(ExecConstants.HASHJOIN_FALLBACK_ENABLED_KEY).bool_val;
+      if (fallbackEnabled) {
+        logger.warn("Spilling is disabled - not enough memory available for internal partitioning. Falling back" +
+          " to use unbounded memory");
+      } else {
+        throw UserException.resourceError().message(String.format("Not enough memory for internal partitioning and fallback mechanism for " +
+          "HashJoin to use unbounded memory is disabled. Either enable fallback config %s using Alter " +
+          "session/system command or increase memory limit for Drillbit", ExecConstants.HASHJOIN_FALLBACK_ENABLED_KEY)).build(logger);
+      }
+    } else {
+      logger.warn(reason);
+    }
+
+    numPartitions = 1; // We are only using one partition
+    canSpill = false; // We cannot spill
+    allocator.setLimit(AbstractBase.MAX_ALLOCATION); // Violate framework and force unbounded memory
   }
 
   /**
@@ -606,6 +645,11 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         for (HashPartition partn : partitions) { partn.updateBatches(); }
         // Fall through
       case OK:
+        // Special treatment (when no spill, and single partition) -- use the incoming vectors as they are (no row copy)
+        if ( numPartitions == 1 ) {
+          partitions[0].appendBatch(buildBatch);
+          break;
+        }
         final int currentRecordCount = buildBatch.getRecordCount();
 
         if ( cycleNum > 0 ) {
@@ -635,8 +679,10 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     // Move the remaining current batches into their temp lists, or spill
     // them if the partition is spilled. Add the spilled partitions into
     // the spilled partitions list
-    for (HashPartition partn : partitions) {
-      partn.completeAnInnerBatch(false, partn.isSpilled() );
+    if ( numPartitions > 1 ) { // a single partition needs no completion
+      for (HashPartition partn : partitions) {
+        partn.completeAnInnerBatch(false, partn.isSpilled());
+      }
     }
 
     HashJoinMemoryCalculator.PostBuildCalculations postBuildCalc = buildCalc.next();
@@ -750,6 +796,15 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     return spilledInners[part] != null;
   }
 
+  /**
+   *  The constructor
+   *
+   * @param popConfig
+   * @param context
+   * @param left  -- probe/outer side incoming input
+   * @param right -- build/iner side incoming input
+   * @throws OutOfMemoryException
+   */
   public HashJoinBatch(HashJoinPOP popConfig, FragmentContext context,
       RecordBatch left, /*Probe side record batch*/
       RecordBatch right /*Build side record batch*/
@@ -772,15 +827,14 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       rightExpr.add(new NamedExpression(conditions.get(i).getRight(), new FieldReference(refName)));
     }
 
+    this.allocator = oContext.getAllocator();
+
     numPartitions = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_PARTITIONS_VALIDATOR);
     if ( numPartitions == 1 ) { //
-      canSpill = false;
-      logger.warn("Spilling is disabled due to configuration setting of num_partitions to 1");
+      disableSpilling("Spilling is disabled due to configuration setting of num_partitions to 1");
     }
 
     numPartitions = BaseAllocator.nextPowerOfTwo(numPartitions); // in case not a power of 2
-
-    this.allocator = oContext.getAllocator();
 
     final long memLimit = context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_MEMORY_VALIDATOR);
 
@@ -791,6 +845,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     RECORDS_PER_BATCH = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_ROWS_IN_BATCH_VALIDATOR);
     maxBatchesInMemory = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_BATCHES_IN_MEMORY_VALIDATOR);
 
+    logger.info("Memory limit {} bytes", FileUtils.byteCountToDisplaySize(allocator.getLimit()));
     spillSet = new SpillSet(context, popConfig);
 
     // Create empty partitions (in the ctor - covers the case where right side is empty)
@@ -807,10 +862,9 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       stats.setLongStat(Metric.SPILL_MB, // update stats - total MB spilled
         (int) Math.round(spillSet.getWriteBytes() / 1024.0D / 1024.0));
     }
-    // clean (and deallocate) each partition
+    // clean (and deallocate) each partition, and delete its spill file
     for (HashPartition partn : partitions) {
-      partn.clearHashTableAndHelper();
-      partn.closeWriterAndDeleteFile();
+      partn.close();
     }
 
     // delete any spill file left in unread spilled partitions
@@ -885,10 +939,12 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
   @Override
   public void close() {
-    for ( HashPartition partn : partitions ) {
-      partn.close();
+    if ( cycleNum > 0 ) { // spilling happened
+      // In case closing due to cancellation, BaseRootExec.close() does not close the open
+      // SpilledRecordBatch "scanners" as it only knows about the original left/right ops.
+      killIncoming(false);
     }
-    cleanup();
+    this.cleanup();
     super.close();
   }
 

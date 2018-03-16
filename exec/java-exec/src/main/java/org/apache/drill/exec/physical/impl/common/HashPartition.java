@@ -17,7 +17,6 @@
  */
 package org.apache.drill.exec.physical.impl.common;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import org.apache.drill.common.exceptions.RetryAfterSpillException;
 import org.apache.drill.common.exceptions.UserException;
@@ -35,6 +34,8 @@ import org.apache.drill.exec.record.BatchSchema;
 import org.apache.drill.exec.record.MaterializedField;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.RecordBatchSizer;
+import org.apache.drill.exec.record.TransferPair;
+import org.apache.drill.exec.record.VectorAccessible;
 import org.apache.drill.exec.record.VectorContainer;
 import org.apache.drill.exec.record.VectorWrapper;
 import org.apache.drill.exec.record.WritableBatch;
@@ -116,13 +117,14 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
   private RecordBatch buildBatch;
   private RecordBatch probeBatch;
   private int cycleNum;
+  private int numPartitions;
   private List<HashJoinMemoryCalculator.BatchStat> inMemoryBatchStats = Lists.newArrayList();
   private long partitionInMemorySize;
   private long numInMemoryRecords;
 
   public HashPartition(FragmentContext context, BufferAllocator allocator, ChainedHashTable baseHashTable,
                        RecordBatch buildBatch, RecordBatch probeBatch,
-                       int recordsPerBatch, SpillSet spillSet, int partNum, int cycleNum) {
+                       int recordsPerBatch, SpillSet spillSet, int partNum, int cycleNum, int numPartitions) {
     this.allocator = allocator;
     this.baseHashTable = baseHashTable;
     this.buildBatch = buildBatch;
@@ -131,6 +133,7 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     this.spillSet = spillSet;
     this.partitionNum = partNum;
     this.cycleNum = cycleNum;
+    this.numPartitions = numPartitions;
 
     try {
       this.hashTable = baseHashTable.createAndSetupHashTable(null);
@@ -147,7 +150,7 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     }
     this.hjHelper = new HashJoinHelper(context, allocator);
     tmpBatchesList = new ArrayList<>();
-    allocateNewCurrentBatchAndHV();
+    if ( numPartitions > 1 ) { allocateNewCurrentBatchAndHV(); }
   }
 
   /**
@@ -265,6 +268,42 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     }
   }
 
+  /**
+   *  Append the incoming batch (actually only the vectors of that batch) into the tmp list
+   */
+  public void appendBatch(VectorAccessible batch) {
+    assert numPartitions == 1;
+    int recordCount = batch.getRecordCount();
+    currHVVector = new IntVector(MaterializedField.create("Hash_Values", HVtype), allocator);
+    currHVVector.allocateNew(recordCount /* RECORDS_PER_BATCH */);
+    try {
+      // For every record in the build batch, hash the key columns and keep the result
+      for (int ind = 0; ind < recordCount; ind++) {
+        int hashCode = getBuildHashCode(ind);
+        currHVVector.getMutator().set(ind, hashCode);   // store the hash value in the new HV column
+      }
+    } catch(SchemaChangeException sce) {}
+
+    VectorContainer container = new VectorContainer();
+    List<ValueVector> vectors = Lists.newArrayList();
+
+    for (VectorWrapper<?> v : batch) {
+      TransferPair tp = v.getValueVector().getTransferPair(allocator);
+      tp.transfer();
+      vectors.add(tp.getTo());
+    }
+
+    container.addCollection(vectors);
+    container.add(currHVVector); // the HV vector is added as an extra "column"
+    container.setRecordCount(recordCount);
+    container.buildSchema(BatchSchema.SelectionVectorMode.NONE);
+
+    tmpBatchesList.add(container);
+    partitionBatchesCount++;
+    currHVVector = null;
+    numInMemoryRecords += recordCount;
+  }
+
   public void spillThisPartition() {
     if ( tmpBatchesList.size() == 0 ) { return; } // in case empty - nothing to spill
     logger.debug("HashJoin: Spilling partition {}, current cycle {}, part size {} batches", partitionNum, cycleNum, tmpBatchesList.size());
@@ -300,15 +339,15 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
         v.getValueVector().getMutator().setValueCount(numRecords);
       }
 
-      WritableBatch batch = WritableBatch.getBatchNoHVWrap(numRecords, vc, false);
+      WritableBatch wBatch = WritableBatch.getBatchNoHVWrap(numRecords, vc, false);
       try {
-        writer.write(batch, null);
+        writer.write(wBatch, null);
       } catch (IOException ioe) {
         throw UserException.dataWriteError(ioe)
           .message("Hash Join failed to write to output file: " + spillFile)
           .build(logger);
       } finally {
-        batch.clear();
+        wBatch.clear();
       }
       vc.zeroVectors();
       logger.trace("HASH JOIN: Took {} us to spill {} records", writer.time(TimeUnit.MICROSECONDS), numRecords);
@@ -398,20 +437,9 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     return partitionNum;
   }
 
-  private void freeCurrentBatchAndHVVector() {
-    if ( currentBatch != null ) {
-      currentBatch.clear();
-      currentBatch = null;
-    }
-    if ( currHVVector != null ) {
-      currHVVector.clear();
-      currHVVector = null;
-    }
-  }
-
-  public void closeWriterAndDeleteFile() {
-    closeWriterInternal(true);
-  }
+  /**
+   * Close the writer without deleting the spill file
+   */
   public void closeWriter() { // no deletion !!
     closeWriterInternal(false);
     processingOuter = true; // After the spill file was closed
@@ -442,7 +470,8 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
   }
 
   /**
-   * Creates the hash table and join helper for this partition. This method should only be called after all the build side records
+   * Creates the hash table and join helper for this partition.
+   * This method should only be called after all the build side records
    * have been consumed.
    */
   public void buildContainersHashTableAndHelper() throws SchemaChangeException {
@@ -493,7 +522,7 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
   /**
    * Frees memory allocated to the {@link HashTable} and {@link HashJoinHelper}.
    */
-  public void clearHashTableAndHelper() {
+  private void clearHashTableAndHelper() {
     if (hashTable != null) {
       hashTable.clear();
       hashTable = null;
@@ -504,7 +533,22 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     }
   }
 
-  public void close() {
+  private void freeCurrentBatchAndHVVector() {
+    if ( currentBatch != null ) {
+      currentBatch.clear();
+      currentBatch = null;
+    }
+    if ( currHVVector != null ) {
+      currHVVector.clear();
+      currHVVector = null;
+    }
+  }
+
+  /**
+   * Free all in-memory allocated structures.
+   * @param deleteFile - whether to delete the spill file or not
+   */
+  public void cleanup(boolean deleteFile) {
     freeCurrentBatchAndHVVector();
     if (containers != null && !containers.isEmpty()) {
       for (VectorContainer vc : containers) {
@@ -515,11 +559,13 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
       VectorContainer vc = tmpBatchesList.remove(0);
       vc.clear();
     }
-    closeWriter();
-    partitionBatchesCount = 0;
-    spillFile = null;
+    closeWriterInternal(deleteFile);
     clearHashTableAndHelper();
     if ( containers != null ) { containers.clear(); }
+  }
+
+  public void close() {
+    cleanup(true);
   }
 
   /**

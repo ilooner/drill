@@ -22,6 +22,8 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.drill.common.logical.data.JoinCondition;
+import org.apache.drill.exec.ExecConstants;
+import org.apache.drill.exec.ops.QueryContext;
 import org.apache.drill.exec.physical.base.AbstractBase;
 import org.apache.drill.exec.physical.base.PhysicalOperator;
 import org.apache.drill.exec.physical.base.PhysicalVisitor;
@@ -116,7 +118,10 @@ public class HashJoinPOP extends AbstractBase {
     }
 
     @Override
-    public boolean isBufferedOperator() {
+    public boolean isBufferedOperator(QueryContext queryContext) {
+        if ( queryContext != null && 1 == (int)queryContext.getOptions().getOption(ExecConstants.HASHJOIN_NUM_PARTITIONS_VALIDATOR) ) {
+            return false;
+        }
         return true;
     }
 }
