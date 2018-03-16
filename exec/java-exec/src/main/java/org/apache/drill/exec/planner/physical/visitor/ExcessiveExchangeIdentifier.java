@@ -20,11 +20,17 @@ package org.apache.drill.exec.planner.physical.visitor;
 import java.util.Collections;
 import java.util.List;
 
+
 import org.apache.drill.exec.planner.fragment.DistributionAffinity;
 import org.apache.drill.exec.planner.physical.ExchangePrel;
 import org.apache.drill.exec.planner.physical.Prel;
 import org.apache.drill.exec.planner.physical.ScanPrel;
 import org.apache.drill.exec.planner.physical.ScreenPrel;
+import org.apache.drill.exec.planner.physical.LimitPrel;
+import org.apache.drill.exec.planner.physical.ProjectPrel;
+import org.apache.drill.exec.planner.physical.FilterPrel;
+import org.apache.drill.exec.planner.physical.SingleMergeExchangePrel;
+import org.apache.drill.exec.planner.physical.HashToMergeExchangePrel;
 import org.apache.calcite.rel.RelNode;
 
 import com.google.common.collect.Lists;
@@ -47,7 +53,17 @@ public class ExcessiveExchangeIdentifier extends BasePrelVisitor<Prel, Excessive
   public Prel visitExchange(ExchangePrel prel, MajorFragmentStat parent) throws RuntimeException {
     parent.add(prel);
     MajorFragmentStat newFrag = new MajorFragmentStat();
+
+    if (prel instanceof SingleMergeExchangePrel) {
+      newFrag.isSimpleRel = true;
+    }
+
     Prel newChild = ((Prel) prel.getInput()).accept(this, newFrag);
+
+    if (parent.isSimpleRel &&
+        prel instanceof HashToMergeExchangePrel) {
+      return newChild;
+    }
 
     if (newFrag.isSingular() && parent.isSingular() &&
         // if one of them has strict distribution or none, we can remove the exchange
@@ -85,6 +101,8 @@ public class ExcessiveExchangeIdentifier extends BasePrelVisitor<Prel, Excessive
       s.add(p);
     }
 
+    s.setHashDistribution(prel);
+
     for(Prel p : prel) {
       children.add(p.accept(this, s));
     }
@@ -100,6 +118,9 @@ public class ExcessiveExchangeIdentifier extends BasePrelVisitor<Prel, Excessive
     private double maxRows = 0d;
     private int maxWidth = Integer.MAX_VALUE;
     private boolean isMultiSubScan = false;
+    //This flag if true signifies that all the Rels thus far
+    //are simple rels with no distribution requirement.
+    private boolean isSimpleRel = false;
 
     public void add(Prel prel) {
       maxRows = Math.max(prel.getRows(), maxRows);
@@ -115,6 +136,13 @@ public class ExcessiveExchangeIdentifier extends BasePrelVisitor<Prel, Excessive
       isMultiSubScan = prel.getGroupScan().getMinParallelizationWidth() > 1;
       distributionAffinity = prel.getDistributionAffinity();
       add(prel);
+    }
+
+    public void setHashDistribution(Prel prel) {
+      isSimpleRel = isSimpleRel &&
+                    (prel instanceof LimitPrel ||
+                     prel instanceof ProjectPrel ||
+                     prel instanceof FilterPrel);
     }
 
     public boolean isSingular() {
