@@ -34,7 +34,7 @@ import java.net.SocketAddress;
  * going to the actual client.
  * </ul>
  */
-public interface UserClientConnection {
+public interface UserClientConnection extends AutoCloseable {
   /**
    * @return User session object.
    */
@@ -66,4 +66,7 @@ public interface UserClientConnection {
    * @return Return the client node address.
    */
   SocketAddress getRemoteAddress();
+
+  @Override
+  void close();
 }

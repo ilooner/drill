@@ -104,4 +104,7 @@ public abstract class AbstractDisposableUserClientConnection implements UserClie
   public DrillPBError getError() {
     return error;
   }
+
+  @Override
+  public void close() {}
 }

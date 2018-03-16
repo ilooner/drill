@@ -29,7 +29,7 @@ import org.apache.drill.test.ClientFixture;
 import org.apache.drill.test.ClusterFixture;
 import org.apache.drill.test.ClusterFixtureBuilder;
 import org.apache.drill.test.ClusterTest;
-import org.apache.drill.test.QueryBuilder.QuerySummary;
+import org.apache.drill.test.QuerySummary;
 import org.apache.drill.test.rowSet.RowSet;
 import org.apache.drill.test.rowSet.RowSetReader;
 import org.apache.drill.categories.PlannerTest;

@@ -198,11 +198,6 @@ public class BaseTestQuery extends ExecTest {
         dirTestWatcher.getRootDir(), DEFAULT_SCHEMA);
     }
 
-    if (!properties.containsKey(DrillProperties.DRILLBIT_CONNECTION)) {
-      properties.setProperty(DrillProperties.DRILLBIT_CONNECTION,
-          String.format("localhost:%s", bits[0].getUserPort()));
-    }
-
     DrillConfig clientConfig = DrillConfig.forClient();
     client = QueryTestUtil.createClient(clientConfig,  serviceSet, MAX_WIDTH_PER_NODE, properties);
   }

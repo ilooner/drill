@@ -198,7 +198,7 @@ public class TestGracefulShutdown extends BaseTestQuery {
     String[] drillbits = { "db1" ,"db2", "db3" };
     ClusterFixtureBuilder builder = ClusterFixture.bareBuilder(dirTestWatcher).withBits(drillbits).withLocalZk();
     builder = enableWebServer(builder);
-    QueryBuilder.QuerySummaryFuture listener;
+    QuerySummaryFuture listener;
     final String sql = "select * from dfs.root.`.`";
     try ( ClusterFixture cluster = builder.build();
           final ClientFixture client = cluster.clientFixture()) {
@@ -249,7 +249,7 @@ public class TestGracefulShutdown extends BaseTestQuery {
     String[] drillbits = {"db1" ,"db2", "db3"};
     ClusterFixtureBuilder builder = ClusterFixture.bareBuilder(dirTestWatcher).withBits(drillbits).withLocalZk();
     builder = enableWebServer(builder);
-    QueryBuilder.QuerySummaryFuture listener;
+    QuerySummaryFuture listener;
     final String sql = "select * from dfs.root.`.`";
     try ( ClusterFixture cluster = builder.build();
           final ClientFixture client = cluster.clientFixture()) {
