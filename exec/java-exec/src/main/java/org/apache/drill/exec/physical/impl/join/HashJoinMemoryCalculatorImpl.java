@@ -38,7 +38,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
   private static final Logger log = LoggerFactory.getLogger(HashJoinMemoryCalculatorImpl.class);
 
   public static final double FRAGMENTATION_FACTOR = 1.0 / SortMemoryManager.PAYLOAD_FROM_BUFFER;
-  public static final double SAFETY_FACTOR = 1.6;
+  public static final double SAFETY_FACTOR = 1.3;
   private boolean initialized = false;
   private boolean doMemoryCalculation;
 
