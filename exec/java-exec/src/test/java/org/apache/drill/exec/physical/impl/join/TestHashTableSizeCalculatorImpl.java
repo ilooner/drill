@@ -18,9 +18,8 @@
 package org.apache.drill.exec.physical.impl.join;
 
 import com.google.common.collect.Maps;
-import org.apache.drill.common.types.TypeProtos;
-import org.apache.drill.exec.expr.TypeHelper;
 import org.apache.drill.exec.record.RecordBatchSizer;
+import org.apache.drill.exec.vector.UInt4Vector;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -30,9 +29,6 @@ public class TestHashTableSizeCalculatorImpl {
   @Test
   public void testCalculateHashTableSize() {
     final int maxNumRecords = 40;
-    final long intSize =
-      ((long) TypeHelper.getSize(TypeProtos.MajorType.newBuilder().setMinorType(TypeProtos.MinorType.INT).build()));
-
     double loadFactor = .75;
 
     final Map<String, Long> keySizes = Maps.newHashMap();
@@ -40,21 +36,21 @@ public class TestHashTableSizeCalculatorImpl {
     keySizes.put("b", 8L);
 
     // 60 * 4/3 = 80 rounded to nearest power of 2 is 128 buckets
-    long expected = intSize * 128;
+    long expected = RecordBatchSizer.multiplyByFactor(
+      UInt4Vector.VALUE_WIDTH * 128, HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR);
     // First bucket key value vector sizes
     expected += HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(maxNumRecords, 3L);
     expected += HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(maxNumRecords, 8L);
 
     // Second bucket key value vector sizes
-    expected += HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(20, 3L);
-    expected += HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(20, 8L);
+    expected += RecordBatchSizer.multiplyByFactor(
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(20, 3L), HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR);
+    expected += RecordBatchSizer.multiplyByFactor(
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(20, 8L), HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR);
 
     // Overhead vectors for links and hash values for each batchHolder
-    expected += 2 * intSize // links and hash values */
+    expected += 2 * UInt4Vector.VALUE_WIDTH // links and hash values */
        * 2 * maxNumRecords; // num batch holders
-
-    // Multiply by doubling factor
-    expected = RecordBatchSizer.multiplyByFactor(expected, HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR);
 
     PartitionStatImpl partitionStat = new PartitionStatImpl();
     partitionStat.add(
