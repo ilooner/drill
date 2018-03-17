@@ -51,7 +51,7 @@ public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
     long numBatchHolders = (numEntries + maxNumRecords - 1) / maxNumRecords;
 
     // Include the size of the buckets array
-    long hashTableSize = computeValueVectorSize(numBuckets, IntVector.VALUE_WIDTH);
+    long hashTableSize = HashJoinRecordBatchSizer.multiplyByFactors(computeValueVectorSize(numBuckets, IntVector.VALUE_WIDTH), HASHTABLE_DOUBLING_FACTOR);
     // Each Batch Holder has an int vector of max size for holding links and hash values
     hashTableSize += numBatchHolders * 2L * IntVector.VALUE_WIDTH * ((long) maxNumRecords);
 
@@ -62,10 +62,11 @@ public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
     if (numFullBatchHolders != numBatchHolders) {
       // The last bucket is a partial bucket
       long partialNumEntries = numEntries % maxNumRecords;
-      hashTableSize += computeVectorSizes(keySizes, partialNumEntries, safetyFactor);
+      final long partialSize = computeVectorSizes(keySizes, partialNumEntries, safetyFactor);
+      hashTableSize += HashJoinRecordBatchSizer.multiplyByFactors(partialSize, HASHTABLE_DOUBLING_FACTOR);
     }
 
-    return HashJoinRecordBatchSizer.multiplyByFactors(hashTableSize, HASHTABLE_DOUBLING_FACTOR, fragmentationFactor);
+    return HashJoinRecordBatchSizer.multiplyByFactors(hashTableSize, fragmentationFactor);
   }
 
   public static long computeVectorSizes(final Map<String, Long> vectorSizes,

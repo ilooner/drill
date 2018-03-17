@@ -878,16 +878,17 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> implem
    */
   private void cleanup() {
     if ( buildSideIsEmpty ) { return; } // not set up; nothing to clean
-    if ( spillSet.getWriteBytes() > 0 ) {
-      stats.setLongStat(Metric.SPILL_MB, // update stats - total MB spilled
-        (int) Math.round(spillSet.getWriteBytes() / 1024.0D / 1024.0));
-    }
+
     // clean (and deallocate) each partition
     for (HashPartition partn : partitions) {
       partn.clearHashTableAndHelper();
       partn.closeWriterAndDeleteFile();
     }
-
+    // Update spill MB stats (partition close above have updated the MB info)
+    if ( spillSet.getWriteBytes() > 0 ) {
+      stats.setLongStat(Metric.SPILL_MB, // update stats - total MB spilled
+        (int) Math.round(spillSet.getWriteBytes() / 1024.0D / 1024.0));
+    }
     // delete any spill file left in unread spilled partitions
     while ( ! spilledPartitionsList.isEmpty() ) {
       HJSpilledPartition sp = spilledPartitionsList.remove(0);
