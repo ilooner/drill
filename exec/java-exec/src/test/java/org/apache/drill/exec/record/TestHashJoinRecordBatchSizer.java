@@ -37,7 +37,7 @@ import static junit.framework.TestCase.fail;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
-public class TestRecordBatchSizer extends SubOperatorTest {
+public class TestHashJoinRecordBatchSizer extends SubOperatorTest {
   private final int testRowCount = 1000;
   private final int testRowCountPowerTwo = 2048;
 

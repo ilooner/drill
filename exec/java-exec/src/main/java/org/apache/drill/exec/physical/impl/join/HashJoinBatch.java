@@ -64,7 +64,24 @@ import org.apache.drill.exec.vector.complex.AbstractContainerVector;
 import org.apache.calcite.rel.core.JoinRelType;
 
 /**
+ *   This class implements the runtime execution for the Hash-Join operator
+ *   supporting INNER, LEFT OUTER, RIGHT OUTER, and FULL OUTER joins
  *
+ *   This implementation splits the incoming Build side rows into multiple Partitions, thus allowing spilling of
+ *   some of these partitions to disk if memory gets tight. Each partition is implemented as a {@link HashPartition}.
+ *   After the build phase is over, in the most general case, some of the partitions were spilled, and the others
+ *   are in memory. Each of the partitions in memory would get a {@link HashTable} built.
+ *      Next the Probe side is read, and each row is key matched with a Build partition. If that partition is in
+ *   memory, then the key is used to probe and perform the join, and the results are added to the outgoing batch.
+ *   But if that build side partition was spilled, then the matching Probe size partition is spilled as well.
+ *      After all the Probe side was processed, we are left with pairs of spilled partitions. Then each pair is
+ *   processed individually (that Build partition should be smaller than the original, hence likely fit whole into
+ *   memory to allow probing; if not -- see below).
+ *      Processing of each spilled pair is EXACTLY like processing the original Build/Probe incomings. (As a fact,
+ *   the {@Link #innerNext() innerNext} method calls itself recursively !!). Thus the spilled build partition is
+ *   read and divided into new partitions, which in turn may spill again (and again...).
+ *   The code tracks these spilling "cycles". Normally any such "again" (i.e. cycle of 2 or greater) is a waste,
+ *   indicating that the number of partitions chosen was too small.
  */
 public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   protected static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(HashJoinBatch.class);
@@ -433,16 +450,9 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     //
     //  Find out the estimated max batch size, etc
     //  and compute the max numPartitions possible
+    //  See partitionNumTuning()
     //
-    // numPartitions = 8; // just for initial work; change later
-    // partitionMask = 7;
-    // bitsInMask = 3;
 
-    //  SET FROM CONFIGURATION OPTIONS :
-    //  ================================
-
-    // Set the number of partitions from the configuration (raise to a power of two, if needed)
-    // Based on the number of partitions: Set the mask and bit count
     partitionMask = numPartitions - 1; // e.g. 32 --> 0x1F
     bitsInMask = Integer.bitCount(partitionMask); // e.g. 0x1F -> 5
 
@@ -744,6 +754,15 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     return spilledInners[part] != null;
   }
 
+  /**
+   *  The constructor
+   *
+   * @param popConfig
+   * @param context
+   * @param left  -- probe/outer side incoming input
+   * @param right -- build/iner side incoming input
+   * @throws OutOfMemoryException
+   */
   public HashJoinBatch(HashJoinPOP popConfig, FragmentContext context,
       RecordBatch left, /*Probe side record batch*/
       RecordBatch right /*Build side record batch*/

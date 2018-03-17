@@ -20,7 +20,7 @@ package org.apache.drill.exec.physical.impl.join;
 import com.google.common.collect.Maps;
 import org.apache.drill.common.types.TypeProtos;
 import org.apache.drill.exec.expr.TypeHelper;
-import org.apache.drill.exec.record.RecordBatchSizer;
+// import org.apache.drill.exec.record.HashJoinRecordBatchSizer;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -54,7 +54,7 @@ public class TestHashTableSizeCalculatorImpl {
        * 2 * maxNumRecords; // num batch holders
 
     // Multiply by doubling factor
-    expected = RecordBatchSizer.multiplyByFactor(expected, HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR);
+    expected = HashJoinRecordBatchSizer.multiplyByFactor(expected, HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR);
 
     PartitionStatImpl partitionStat = new PartitionStatImpl();
     partitionStat.add(
