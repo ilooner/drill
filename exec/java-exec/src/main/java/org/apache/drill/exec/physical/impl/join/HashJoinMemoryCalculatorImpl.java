@@ -19,11 +19,10 @@ package org.apache.drill.exec.physical.impl.join;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import org.apache.commons.io.FileUtils;
 import org.apache.drill.common.map.CaseInsensitiveMap;
 import org.apache.drill.exec.physical.impl.xsort.managed.SortMemoryManager;
 import org.apache.drill.exec.record.RecordBatch;
-import org.apache.drill.exec.record.RecordBatchSizer;
+// import org.apache.drill.exec.record.HashJoinRecordBatchSizer;
 import org.apache.drill.exec.vector.IntVector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,7 +72,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     long maxBatchSize = HashJoinMemoryCalculatorImpl
       .computePartitionBatchSize(incomingBatchSize, incomingNumRecords, desiredNumRecords);
     // Multiple by fragmentation factor
-    return RecordBatchSizer.multiplyByFactors(maxBatchSize, fragmentationFactor, safetyFactor);
+    return HashJoinRecordBatchSizer.multiplyByFactors(maxBatchSize, fragmentationFactor, safetyFactor);
   }
 
   public static long computeMaxBatchSize(final long incomingBatchSize,
@@ -93,7 +92,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     }
 
     long hashSize = desiredNumRecords * ((long) IntVector.VALUE_WIDTH);
-    hashSize = RecordBatchSizer.multiplyByFactors(hashSize, fragmentationFactor);
+    hashSize = HashJoinRecordBatchSizer.multiplyByFactors(hashSize, fragmentationFactor);
 
     return size + hashSize;
   }
@@ -257,8 +256,8 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       Preconditions.checkNotNull(probeSideBatch);
       Preconditions.checkNotNull(joinColumns);
 
-      final RecordBatchSizer buildSizer = new RecordBatchSizer(buildSideBatch);
-      final RecordBatchSizer probeSizer = new RecordBatchSizer(probeSideBatch);
+      final HashJoinRecordBatchSizer buildSizer = new HashJoinRecordBatchSizer(buildSideBatch);
+      final HashJoinRecordBatchSizer probeSizer = new HashJoinRecordBatchSizer(probeSideBatch);
 
       long buildBatchSize = getBatchSizeEstimate(buildSideBatch);
       long probeBatchSize = getBatchSizeEstimate(probeSideBatch);
@@ -273,7 +272,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       final CaseInsensitiveMap<Long> keySizes = CaseInsensitiveMap.newHashMap();
 
       for (String joinColumn: joinColumns) {
-        final RecordBatchSizer.ColumnSize columnSize = buildSizer.columns().get(joinColumn);
+        final HashJoinRecordBatchSizer.ColumnSize columnSize = buildSizer.columns().get(joinColumn);
         keySizes.put(joinColumn, (long)columnSize.getStdOrEstSize());
       }
 
@@ -299,7 +298,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     @VisibleForTesting
     protected static CaseInsensitiveMap<Long> getNotExcludedColumnSizes(
         final Set<String> excludedColumns,
-        final RecordBatchSizer batchSizer) {
+        final HashJoinRecordBatchSizer batchSizer) {
       final CaseInsensitiveMap<Long> columnSizes = CaseInsensitiveMap.newHashMap();
       final CaseInsensitiveMap<Boolean> excludedSet = CaseInsensitiveMap.newHashMap();
 
@@ -307,9 +306,9 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         excludedSet.put(excludedColumn, true);
       }
 
-      for (final Map.Entry<String, RecordBatchSizer.ColumnSize> entry: batchSizer.columns().entrySet()) {
+      for (final Map.Entry<String, HashJoinRecordBatchSizer.ColumnSize> entry: batchSizer.columns().entrySet()) {
         final String columnName = entry.getKey();
-        final RecordBatchSizer.ColumnSize columnSize = entry.getValue();
+        final HashJoinRecordBatchSizer.ColumnSize columnSize = entry.getValue();
 
         columnSizes.put(columnName, (long) columnSize.getStdOrEstSize());
       }
@@ -318,10 +317,10 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     }
 
     public static long getBatchSizeEstimate(final RecordBatch recordBatch) {
-      final RecordBatchSizer sizer = new RecordBatchSizer(recordBatch);
+      final HashJoinRecordBatchSizer sizer = new HashJoinRecordBatchSizer(recordBatch);
       long size = 0L;
 
-      for (Map.Entry<String, RecordBatchSizer.ColumnSize> column: sizer.columns().entrySet()) {
+      for (Map.Entry<String, HashJoinRecordBatchSizer.ColumnSize> column: sizer.columns().entrySet()) {
         size += PostBuildCalculationsImpl.computeValueVectorSize(recordBatch.getRecordCount(), column.getValue().getStdOrEstSize());
       }
 
@@ -507,7 +506,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       long outputSize = HashTableSizeCalculatorImpl.computeVectorSizes(keySizes, outputNumRecords, safetyFactor)
         + HashTableSizeCalculatorImpl.computeVectorSizes(buildValueSizes, outputNumRecords, safetyFactor)
         + HashTableSizeCalculatorImpl.computeVectorSizes(probeValueSizes, outputNumRecords, safetyFactor);
-      return RecordBatchSizer.multiplyByFactor(outputSize, fragmentationFactor);
+      return HashJoinRecordBatchSizer.multiplyByFactor(outputSize, fragmentationFactor);
     }
 
     @Override
@@ -521,7 +520,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         consumedMemory += ((long) IntVector.VALUE_WIDTH) * partitionStatsSet.getNumInMemoryRecords();
       }
 
-      consumedMemory += RecordBatchSizer.multiplyByFactor(partitionStatsSet.getConsumedMemory(), fragmentationFactor);
+      consumedMemory += HashJoinRecordBatchSizer.multiplyByFactor(partitionStatsSet.getConsumedMemory(), fragmentationFactor);
       return consumedMemory > memoryAvailable;
     }
 
@@ -682,7 +681,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
     public static long computeValueVectorSize(long numRecords, long byteSize, double safetyFactor)
     {
-      long naiveSize = RecordBatchSizer.multiplyByFactor(numRecords * byteSize, safetyFactor);
+      long naiveSize = HashJoinRecordBatchSizer.multiplyByFactor(numRecords * byteSize, safetyFactor);
       return roundUpToPowerOf2(naiveSize);
     }
 
@@ -716,7 +715,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
       // We are consuming our reserved memory plus the amount of memory for each build side
       // batch and the size of the hashtables and the size of the join helpers
-      consumedMemory = reservedMemory + RecordBatchSizer.multiplyByFactor(buildPartitionStatSet.getConsumedMemory(), fragmentationFactor);
+      consumedMemory = reservedMemory + HashJoinRecordBatchSizer.multiplyByFactor(buildPartitionStatSet.getConsumedMemory(), fragmentationFactor);
 
       // Handle early completion conditions
       if (buildPartitionStatSet.allSpilled()) {
