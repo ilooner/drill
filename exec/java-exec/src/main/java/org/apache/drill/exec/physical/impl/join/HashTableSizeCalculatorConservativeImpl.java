@@ -18,19 +18,21 @@
 package org.apache.drill.exec.physical.impl.join;
 
 import com.google.common.base.Preconditions;
-// import org.apache.drill.exec.record.HashJoinRecordBatchSizer;
 import org.apache.drill.exec.vector.IntVector;
 
 import java.util.Map;
 
 import static org.apache.drill.exec.physical.impl.join.HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize;
 
-public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
+public class HashTableSizeCalculatorConservativeImpl implements HashTableSizeCalculator {
+  public static final String TYPE = "CONSERVATIVE";
   public static final double HASHTABLE_DOUBLING_FACTOR = 2.0;
   private final int maxNumRecords;
+  private final double hashTableDoublingFactor;
 
-  public HashTableSizeCalculatorImpl(int maxNumRecords) {
+  public HashTableSizeCalculatorConservativeImpl(int maxNumRecords, double hashTableDoublingFactor) {
     this.maxNumRecords = maxNumRecords;
+    this.hashTableDoublingFactor = hashTableDoublingFactor;
   }
 
   @Override
@@ -51,7 +53,7 @@ public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
     long numBatchHolders = (numEntries + maxNumRecords - 1) / maxNumRecords;
 
     // Include the size of the buckets array
-    long hashTableSize = computeValueVectorSize(numBuckets, IntVector.VALUE_WIDTH);
+    long hashTableSize = HashJoinRecordBatchSizer.multiplyByFactors(computeValueVectorSize(numBuckets, IntVector.VALUE_WIDTH), hashTableDoublingFactor);
     // Each Batch Holder has an int vector of max size for holding links and hash values
     hashTableSize += numBatchHolders * 2L * IntVector.VALUE_WIDTH * ((long) maxNumRecords);
 
@@ -62,10 +64,21 @@ public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
     if (numFullBatchHolders != numBatchHolders) {
       // The last bucket is a partial bucket
       long partialNumEntries = numEntries % maxNumRecords;
-      hashTableSize += computeVectorSizes(keySizes, partialNumEntries, safetyFactor);
+      final long partialSize = computeVectorSizes(keySizes, partialNumEntries, safetyFactor);
+      hashTableSize += HashJoinRecordBatchSizer.multiplyByFactors(partialSize, hashTableDoublingFactor);
     }
 
-    return HashJoinRecordBatchSizer.multiplyByFactors(hashTableSize, HASHTABLE_DOUBLING_FACTOR, fragmentationFactor);
+    return HashJoinRecordBatchSizer.multiplyByFactors(hashTableSize, fragmentationFactor);
+  }
+
+  @Override
+  public double getDoublingFactor() {
+    return hashTableDoublingFactor;
+  }
+
+  @Override
+  public String getType() {
+    return TYPE;
   }
 
   public static long computeVectorSizes(final Map<String, Long> vectorSizes,

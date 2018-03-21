@@ -25,4 +25,8 @@ public interface HashTableSizeCalculator {
                      double loadFactor,
                      double safetyFactor,
                      double fragmentationFactor);
+
+  double getDoublingFactor();
+
+  String getType();
 }

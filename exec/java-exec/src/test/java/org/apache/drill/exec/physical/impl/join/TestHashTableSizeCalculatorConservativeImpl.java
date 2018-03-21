@@ -18,21 +18,16 @@
 package org.apache.drill.exec.physical.impl.join;
 
 import com.google.common.collect.Maps;
-import org.apache.drill.common.types.TypeProtos;
-import org.apache.drill.exec.expr.TypeHelper;
-// import org.apache.drill.exec.record.HashJoinRecordBatchSizer;
+import org.apache.drill.exec.vector.UInt4Vector;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Map;
 
-public class TestHashTableSizeCalculatorImpl {
+public class TestHashTableSizeCalculatorConservativeImpl {
   @Test
   public void testCalculateHashTableSize() {
     final int maxNumRecords = 40;
-    final long intSize =
-      ((long) TypeHelper.getSize(TypeProtos.MajorType.newBuilder().setMinorType(TypeProtos.MinorType.INT).build()));
-
     double loadFactor = .75;
 
     final Map<String, Long> keySizes = Maps.newHashMap();
@@ -40,27 +35,27 @@ public class TestHashTableSizeCalculatorImpl {
     keySizes.put("b", 8L);
 
     // 60 * 4/3 = 80 rounded to nearest power of 2 is 128 buckets
-    long expected = intSize * 128;
+    long expected = HashJoinRecordBatchSizer.multiplyByFactor(
+      UInt4Vector.VALUE_WIDTH * 128, HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR);
     // First bucket key value vector sizes
     expected += HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(maxNumRecords, 3L);
     expected += HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(maxNumRecords, 8L);
 
     // Second bucket key value vector sizes
-    expected += HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(20, 3L);
-    expected += HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(20, 8L);
+    expected += HashJoinRecordBatchSizer.multiplyByFactor(
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(20, 3L), HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR);
+    expected += HashJoinRecordBatchSizer.multiplyByFactor(
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(20, 8L), HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR);
 
     // Overhead vectors for links and hash values for each batchHolder
-    expected += 2 * intSize // links and hash values */
+    expected += 2 * UInt4Vector.VALUE_WIDTH // links and hash values */
        * 2 * maxNumRecords; // num batch holders
-
-    // Multiply by doubling factor
-    expected = HashJoinRecordBatchSizer.multiplyByFactor(expected, HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR);
 
     PartitionStatImpl partitionStat = new PartitionStatImpl();
     partitionStat.add(
       new HashJoinMemoryCalculator.BatchStat(maxNumRecords + 20, 1));
 
-    final HashTableSizeCalculatorImpl calc = new HashTableSizeCalculatorImpl(maxNumRecords);
+    final HashTableSizeCalculatorConservativeImpl calc = new HashTableSizeCalculatorConservativeImpl(maxNumRecords, HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR);
     long actual = calc.calculateSize(partitionStat, keySizes, loadFactor, 1.0, 1.0);
 
     Assert.assertEquals(expected, actual);

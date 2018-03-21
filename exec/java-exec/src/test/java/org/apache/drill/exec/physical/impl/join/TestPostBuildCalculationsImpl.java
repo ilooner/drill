@@ -406,6 +406,16 @@ public class TestPostBuildCalculationsImpl {
                               double loadFactor, double safetyFactor, double fragmentationFactor) {
       return size;
     }
+
+    @Override
+    public double getDoublingFactor() {
+      return HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR;
+    }
+
+    @Override
+    public String getType() {
+      return null;
+    }
   }
 
   public static class MockHashJoinHelperSizeCalculator implements HashJoinHelperSizeCalculator {

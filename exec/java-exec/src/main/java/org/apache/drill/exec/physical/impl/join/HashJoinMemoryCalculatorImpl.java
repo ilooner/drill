@@ -20,9 +20,7 @@ package org.apache.drill.exec.physical.impl.join;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import org.apache.drill.common.map.CaseInsensitiveMap;
-import org.apache.drill.exec.physical.impl.xsort.managed.SortMemoryManager;
 import org.apache.drill.exec.record.RecordBatch;
-// import org.apache.drill.exec.record.HashJoinRecordBatchSizer;
 import org.apache.drill.exec.vector.IntVector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,10 +34,23 @@ import static org.apache.drill.exec.physical.impl.join.HashJoinState.INITIALIZIN
 public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
   private static final Logger log = LoggerFactory.getLogger(HashJoinMemoryCalculatorImpl.class);
 
-  public static final double FRAGMENTATION_FACTOR = 1.0 / SortMemoryManager.PAYLOAD_FROM_BUFFER;
-  public static final double SAFETY_FACTOR = 1.6;
+  private final double safetyFactor;
+  private final double fragmentationFactor;
+  private final double hashTableDoublingFactor;
+  private final String hashTableCalculatorType;
+
   private boolean initialized = false;
   private boolean doMemoryCalculation;
+
+  public HashJoinMemoryCalculatorImpl(final double safetyFactor,
+                                      final double fragmentationFactor,
+                                      final double hashTableDoublingFactor,
+                                      final String hashTableCalculatorType) {
+    this.safetyFactor = safetyFactor;
+    this.fragmentationFactor = fragmentationFactor;
+    this.hashTableDoublingFactor = hashTableDoublingFactor;
+    this.hashTableCalculatorType = hashTableCalculatorType;
+  }
 
   public void initialize(boolean doMemoryCalculation) {
     Preconditions.checkState(!initialized);
@@ -51,9 +62,19 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     Preconditions.checkState(initialized);
 
     if (doMemoryCalculation) {
-      return new BuildSidePartitioningImpl(new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE),
+      final HashTableSizeCalculator hashTableSizeCalculator;
+
+      if (hashTableCalculatorType.equals(HashTableSizeCalculatorLeanImpl.TYPE)) {
+        hashTableSizeCalculator = new HashTableSizeCalculatorLeanImpl(RecordBatch.MAX_BATCH_SIZE, hashTableDoublingFactor);
+      } else if (hashTableCalculatorType.equals(HashTableSizeCalculatorConservativeImpl.TYPE)) {
+        hashTableSizeCalculator = new HashTableSizeCalculatorConservativeImpl(RecordBatch.MAX_BATCH_SIZE, hashTableDoublingFactor);
+      } else {
+        throw new IllegalArgumentException("Invalid calc type: " + hashTableCalculatorType);
+      }
+
+      return new BuildSidePartitioningImpl(hashTableSizeCalculator,
         HashJoinHelperSizeCalculatorImpl.INSTANCE,
-        FRAGMENTATION_FACTOR, SAFETY_FACTOR);
+        fragmentationFactor, safetyFactor);
     } else {
       return new NoopBuildSidePartitioningImpl();
     }
@@ -503,9 +524,9 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
                                                  int outputNumRecords,
                                                  double safetyFactor,
                                                  double fragmentationFactor) {
-      long outputSize = HashTableSizeCalculatorImpl.computeVectorSizes(keySizes, outputNumRecords, safetyFactor)
-        + HashTableSizeCalculatorImpl.computeVectorSizes(buildValueSizes, outputNumRecords, safetyFactor)
-        + HashTableSizeCalculatorImpl.computeVectorSizes(probeValueSizes, outputNumRecords, safetyFactor);
+      long outputSize = HashTableSizeCalculatorConservativeImpl.computeVectorSizes(keySizes, outputNumRecords, safetyFactor)
+        + HashTableSizeCalculatorConservativeImpl.computeVectorSizes(buildValueSizes, outputNumRecords, safetyFactor)
+        + HashTableSizeCalculatorConservativeImpl.computeVectorSizes(probeValueSizes, outputNumRecords, safetyFactor);
       return HashJoinRecordBatchSizer.multiplyByFactor(outputSize, fragmentationFactor);
     }
 
@@ -752,7 +773,8 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       }
 
       // Some of our probe side batches were spilled so we have to recursively process the partitions.
-      return new HashJoinMemoryCalculatorImpl();
+      return new HashJoinMemoryCalculatorImpl(
+        safetyFactor, fragmentationFactor, hashTableSizeCalculator.getDoublingFactor(), hashTableSizeCalculator.getType());
     }
 
     @Override
