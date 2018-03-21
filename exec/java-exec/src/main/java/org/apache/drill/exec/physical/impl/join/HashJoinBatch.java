@@ -213,51 +213,6 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> implem
 
   @Override
   protected boolean prefetchFirstBatchFromBothSides() {
-    if (internalPrefetchFirstBatchFromBothSides() == false) {
-      return false;
-    }
-
-    /* It is fine to early exit when one of the stream is NONE for INNER join.
-     * INNER join doesn't produce any data if one of the stream is NONE.
-     * However, this is not true for non INNER join's.
-     */
-    if (this.joinType == JoinRelType.INNER && (leftUpstream == IterOutcome.NONE || rightUpstream == IterOutcome.NONE)) {
-
-      if (rightUpstream == IterOutcome.NONE) {
-        drainLeft();
-      }
-
-      if (leftUpstream == IterOutcome.NONE) {
-        drainRight();
-      }
-
-      state = BatchState.DONE;
-      return false;
-    }
-
-    return true;
-  }
-
-  @Override
-  protected void buildSchema() throws SchemaChangeException {
-    if (! prefetchFirstBatchFromBothSides()) {
-      return;
-    }
-
-    // Initialize the hash join helper context
-    if (rightUpstream != IterOutcome.NONE) {
-      setupHashTable();
-    }
-    setupOutputContainerSchema();
-    // Build the container schema and set the counts
-    for (final VectorWrapper<?> w : container) {
-      w.getValueVector().allocateNew();
-    }
-    container.buildSchema(BatchSchema.SelectionVectorMode.NONE);
-    container.setRecordCount(outputRecords);
-  }
-
-  private boolean internalPrefetchFirstBatchFromBothSides() {
     leftUpstream = sniffNonEmptyBatch(0, left);
     rightUpstream = sniffNonEmptyBatch(1, right);
 
@@ -278,6 +233,25 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> implem
 
     state = BatchState.FIRST;  // Got our first batches on both sides
     return true;
+  }
+
+  @Override
+  protected void buildSchema() throws SchemaChangeException {
+    if (! prefetchFirstBatchFromBothSides()) {
+      return;
+    }
+
+    // Initialize the hash join helper context
+    if (rightUpstream != IterOutcome.NONE) {
+      setupHashTable();
+    }
+    setupOutputContainerSchema();
+    // Build the container schema and set the counts
+    for (final VectorWrapper<?> w : container) {
+      w.getValueVector().allocateNew();
+    }
+    container.buildSchema(BatchSchema.SelectionVectorMode.NONE);
+    container.setRecordCount(outputRecords);
   }
 
   /**
