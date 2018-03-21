@@ -18,7 +18,6 @@
 package org.apache.drill.exec.physical.impl.join;
 
 import com.google.common.base.Preconditions;
-// import org.apache.drill.exec.record.HashJoinRecordBatchSizer;
 import org.apache.drill.exec.vector.IntVector;
 
 import java.util.Map;
@@ -28,9 +27,11 @@ import static org.apache.drill.exec.physical.impl.join.HashJoinMemoryCalculatorI
 public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
   public static final double HASHTABLE_DOUBLING_FACTOR = 2.0;
   private final int maxNumRecords;
+  private final double hashTableDoublingFactor;
 
-  public HashTableSizeCalculatorImpl(int maxNumRecords) {
+  public HashTableSizeCalculatorImpl(int maxNumRecords, double hashTableDoublingFactor) {
     this.maxNumRecords = maxNumRecords;
+    this.hashTableDoublingFactor = hashTableDoublingFactor;
   }
 
   @Override
@@ -67,6 +68,11 @@ public class HashTableSizeCalculatorImpl implements HashTableSizeCalculator {
     }
 
     return HashJoinRecordBatchSizer.multiplyByFactors(hashTableSize, fragmentationFactor);
+  }
+
+  @Override
+  public double getDoublingFactor() {
+    return hashTableDoublingFactor;
   }
 
   public static long computeVectorSizes(final Map<String, Long> vectorSizes,

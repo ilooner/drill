@@ -36,10 +36,20 @@ import static org.apache.drill.exec.physical.impl.join.HashJoinState.INITIALIZIN
 public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
   private static final Logger log = LoggerFactory.getLogger(HashJoinMemoryCalculatorImpl.class);
 
-  public static final double FRAGMENTATION_FACTOR = 1.0 / SortMemoryManager.PAYLOAD_FROM_BUFFER;
-  public static final double SAFETY_FACTOR = 1.3;
+  private final double safetyFactor;
+  private final double fragmentationFactor;
+  private final double hashTableDoublingFactor;
+
   private boolean initialized = false;
   private boolean doMemoryCalculation;
+
+  public HashJoinMemoryCalculatorImpl(final double safetyFactor,
+                                      final double fragmentationFactor,
+                                      final double hashTableDoublingFactor) {
+    this.safetyFactor = safetyFactor;
+    this.fragmentationFactor = fragmentationFactor;
+    this.hashTableDoublingFactor = hashTableDoublingFactor;
+  }
 
   public void initialize(boolean doMemoryCalculation) {
     Preconditions.checkState(!initialized);
@@ -51,9 +61,9 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     Preconditions.checkState(initialized);
 
     if (doMemoryCalculation) {
-      return new BuildSidePartitioningImpl(new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE),
+      return new BuildSidePartitioningImpl(new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE, hashTableDoublingFactor),
         HashJoinHelperSizeCalculatorImpl.INSTANCE,
-        FRAGMENTATION_FACTOR, SAFETY_FACTOR);
+        fragmentationFactor, safetyFactor);
     } else {
       return new NoopBuildSidePartitioningImpl();
     }
@@ -752,7 +762,8 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       }
 
       // Some of our probe side batches were spilled so we have to recursively process the partitions.
-      return new HashJoinMemoryCalculatorImpl();
+      return new HashJoinMemoryCalculatorImpl(
+        safetyFactor, fragmentationFactor, hashTableSizeCalculator.getDoublingFactor());
     }
 
     @Override

@@ -18,8 +18,6 @@
 package org.apache.drill.exec.physical.impl.join;
 
 import com.google.common.collect.Maps;
-// import org.apache.drill.exec.record.HashJoinRecordBatchSizer;
-// import org.apache.drill.exec.record.RecordBatchSizer;
 import org.apache.drill.exec.vector.UInt4Vector;
 import org.junit.Assert;
 import org.junit.Test;
@@ -57,7 +55,7 @@ public class TestHashTableSizeCalculatorImpl {
     partitionStat.add(
       new HashJoinMemoryCalculator.BatchStat(maxNumRecords + 20, 1));
 
-    final HashTableSizeCalculatorImpl calc = new HashTableSizeCalculatorImpl(maxNumRecords);
+    final HashTableSizeCalculatorImpl calc = new HashTableSizeCalculatorImpl(maxNumRecords, HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR);
     long actual = calc.calculateSize(partitionStat, keySizes, loadFactor, 1.0, 1.0);
 
     Assert.assertEquals(expected, actual);
