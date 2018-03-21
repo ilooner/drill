@@ -273,7 +273,11 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
    */
   public HashJoinMemoryCalculator getCalculatorImpl() {
     if (maxBatchesInMemory == 0) {
-      return new HashJoinMemoryCalculatorImpl();
+      final double safetyFactor = context.getOptions().getDouble(ExecConstants.HASHJOIN_SAFETY_FACTOR_KEY);
+      final double fragmentationFactor = context.getOptions().getDouble(ExecConstants.HASHJOIN_FRAGMENTATION_FACTOR_KEY);
+      final double hashTableDoublingFactor = context.getOptions().getDouble(ExecConstants.HASHJOIN_HASH_DOUBLE_FACTOR_KEY);
+
+      return new HashJoinMemoryCalculatorImpl(safetyFactor, fragmentationFactor, hashTableDoublingFactor);
     } else {
       return new HashJoinMechanicalMemoryCalculator(maxBatchesInMemory);
     }
@@ -510,7 +514,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       logger.warn(message);
 
       // create a Noop memory calculator
-      final HashJoinMemoryCalculator calc = new HashJoinMemoryCalculatorImpl();
+      final HashJoinMemoryCalculator calc = getCalculatorImpl();
       calc.initialize(false);
       buildCalc = calc.next();
 
