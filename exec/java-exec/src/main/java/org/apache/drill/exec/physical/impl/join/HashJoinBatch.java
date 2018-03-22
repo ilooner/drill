@@ -22,6 +22,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+
+import org.apache.drill.exec.memory.RootAllocator;
 import org.apache.drill.exec.record.VectorContainer;
 
 import com.google.common.collect.Lists;
@@ -820,25 +822,29 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> implem
       rightExpr.add(new NamedExpression(conditions.get(i).getRight(), new FieldReference(refName)));
     }
 
+    this.allocator = oContext.getAllocator();
     numPartitions = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_PARTITIONS_VALIDATOR);
+
     if ( numPartitions == 1 ) { //
       canSpill = false;
+      allocator.setLimit(AbstractBase.MAX_ALLOCATION);
       logger.warn("Spilling is disabled due to configuration setting of num_partitions to 1");
     }
     // row-key join can not yet work with spilling - thus RKJ disables spilling
     if ( isRowKeyJoin ) {
       numPartitions = 1;
+      allocator.setLimit(AbstractBase.MAX_ALLOCATION);
       canSpill = false;
     }
 
     numPartitions = BaseAllocator.nextPowerOfTwo(numPartitions); // in case not a power of 2
 
-    this.allocator = oContext.getAllocator();
+    if (canSpill) {
+      final long memLimit = context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_MEMORY_VALIDATOR);
 
-    final long memLimit = context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_MEMORY_VALIDATOR);
-
-    if (memLimit != 0) {
-      allocator.setLimit(memLimit);
+      if (memLimit != 0) {
+        allocator.setLimit(memLimit);
+      }
     }
 
     RECORDS_PER_BATCH = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_ROWS_IN_BATCH_VALIDATOR);
