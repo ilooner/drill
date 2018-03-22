@@ -409,7 +409,12 @@ public class TestPostBuildCalculationsImpl {
 
     @Override
     public double getDoublingFactor() {
-      return HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR;
+      return HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR;
+    }
+
+    @Override
+    public String getType() {
+      return null;
     }
   }
 

@@ -28,7 +28,7 @@ public class TestBuildSidePartitioningImpl {
     final int maxBatchNumRecords = 20;
     final HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl calc =
       new HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl(
-        new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE, HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR),
+        new HashTableSizeCalculatorConservativeImpl(RecordBatch.MAX_BATCH_SIZE, HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR),
         HashJoinHelperSizeCalculatorImpl.INSTANCE,
         2.0,
         1.5);
@@ -73,7 +73,7 @@ public class TestBuildSidePartitioningImpl {
     final int maxBatchNumRecords = 20;
     final HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl calc =
       new HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl(
-        new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE, HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR),
+        new HashTableSizeCalculatorConservativeImpl(RecordBatch.MAX_BATCH_SIZE, HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR),
         HashJoinHelperSizeCalculatorImpl.INSTANCE,
         2.0,
         1.5);
@@ -118,7 +118,7 @@ public class TestBuildSidePartitioningImpl {
     final int maxBatchNumRecords = 20;
     final HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl calc =
       new HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl(
-        new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE, HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR),
+        new HashTableSizeCalculatorConservativeImpl(RecordBatch.MAX_BATCH_SIZE, HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR),
         HashJoinHelperSizeCalculatorImpl.INSTANCE,
         2.0,
         1.5);
@@ -166,7 +166,7 @@ public class TestBuildSidePartitioningImpl {
 
     final HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl calc =
       new HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl(
-        new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE, HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR),
+        new HashTableSizeCalculatorConservativeImpl(RecordBatch.MAX_BATCH_SIZE, HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR),
         HashJoinHelperSizeCalculatorImpl.INSTANCE,
         2.0,
         1.5);
@@ -217,7 +217,7 @@ public class TestBuildSidePartitioningImpl {
     final int maxBatchNumRecords = 20;
     final HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl calc =
       new HashJoinMemoryCalculatorImpl.BuildSidePartitioningImpl(
-        new HashTableSizeCalculatorImpl(RecordBatch.MAX_BATCH_SIZE, HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR),
+        new HashTableSizeCalculatorConservativeImpl(RecordBatch.MAX_BATCH_SIZE, HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR),
         HashJoinHelperSizeCalculatorImpl.INSTANCE,
         2.0,
         1.5);

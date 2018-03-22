@@ -24,7 +24,7 @@ import org.junit.Test;
 
 import java.util.Map;
 
-public class TestHashTableSizeCalculatorImpl {
+public class TestHashTableSizeCalculatorConservativeImpl {
   @Test
   public void testCalculateHashTableSize() {
     final int maxNumRecords = 40;
@@ -36,16 +36,16 @@ public class TestHashTableSizeCalculatorImpl {
 
     // 60 * 4/3 = 80 rounded to nearest power of 2 is 128 buckets
     long expected = HashJoinRecordBatchSizer.multiplyByFactor(
-      UInt4Vector.VALUE_WIDTH * 128, HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR);
+      UInt4Vector.VALUE_WIDTH * 128, HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR);
     // First bucket key value vector sizes
     expected += HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(maxNumRecords, 3L);
     expected += HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(maxNumRecords, 8L);
 
     // Second bucket key value vector sizes
     expected += HashJoinRecordBatchSizer.multiplyByFactor(
-      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(20, 3L), HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR);
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(20, 3L), HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR);
     expected += HashJoinRecordBatchSizer.multiplyByFactor(
-      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(20, 8L), HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR);
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.computeValueVectorSize(20, 8L), HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR);
 
     // Overhead vectors for links and hash values for each batchHolder
     expected += 2 * UInt4Vector.VALUE_WIDTH // links and hash values */
@@ -55,7 +55,7 @@ public class TestHashTableSizeCalculatorImpl {
     partitionStat.add(
       new HashJoinMemoryCalculator.BatchStat(maxNumRecords + 20, 1));
 
-    final HashTableSizeCalculatorImpl calc = new HashTableSizeCalculatorImpl(maxNumRecords, HashTableSizeCalculatorImpl.HASHTABLE_DOUBLING_FACTOR);
+    final HashTableSizeCalculatorConservativeImpl calc = new HashTableSizeCalculatorConservativeImpl(maxNumRecords, HashTableSizeCalculatorConservativeImpl.HASHTABLE_DOUBLING_FACTOR);
     long actual = calc.calculateSize(partitionStat, keySizes, loadFactor, 1.0, 1.0);
 
     Assert.assertEquals(expected, actual);
