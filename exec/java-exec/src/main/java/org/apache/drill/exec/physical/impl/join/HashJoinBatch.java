@@ -528,12 +528,35 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         TARGET_RECORDS_PER_BATCH,
         HashTable.DEFAULT_LOAD_FACTOR);
 
-      numPartitions = 1; // We are only using one partition
-      canSpill = false; // We cannot spill
-      allocator.setLimit(AbstractBase.MAX_ALLOCATION); // Violate framework and force unbounded memory
+      disableSpilling(null);
     }
 
     return buildCalc;
+  }
+
+  /**
+   *  Disable spilling - use only a single partition and set the memory limit to the max ( 10GB )
+   *  @param reason If not null - log this as warning, else check fallback setting to either warn or fail.
+   */
+  private void disableSpilling(String reason) {
+    // Fail, or just issue a warning if a reason was given, or a fallback option is enabled
+    if ( reason == null ) {
+      final boolean fallbackEnabled = context.getOptions().getOption(ExecConstants.HASHJOIN_FALLBACK_ENABLED_KEY).bool_val;
+      if (fallbackEnabled) {
+        logger.warn("Spilling is disabled - not enough memory available for internal partitioning. Falling back" +
+          " to use unbounded memory");
+      } else {
+        throw UserException.resourceError().message(String.format("Not enough memory for internal partitioning and fallback mechanism for " +
+          "HashJoin to use unbounded memory is disabled. Either enable fallback config %s using Alter " +
+          "session/system command or increase memory limit for Drillbit", ExecConstants.HASHJOIN_FALLBACK_ENABLED_KEY)).build(logger);
+      }
+    } else {
+      logger.warn(reason);
+    }
+
+    numPartitions = 1; // We are only using one partition
+    canSpill = false; // We cannot spill
+    allocator.setLimit(AbstractBase.MAX_ALLOCATION); // Violate framework and force unbounded memory
   }
 
   /**
@@ -623,7 +646,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           int currPart = hashCode & partitionMask ;
           hashCode >>>= bitsInMask;
           // Append the new inner row to the appropriate partition; spill (that partition) if needed
-          partitions[currPart].appendInnerRow(buildBatch.getContainer(), ind, hashCode, buildCalc); // may spill if needed
+          partitions[currPart].appendInnerRow(buildBatch.getContainer(), ind, hashCode,
+            canSpill ? buildCalc : null); // may spill if needed
         }
 
         if ( read_HV_vector != null ) {
@@ -785,15 +809,14 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       rightExpr.add(new NamedExpression(conditions.get(i).getRight(), new FieldReference(refName)));
     }
 
+    this.allocator = oContext.getAllocator();
+
     numPartitions = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_PARTITIONS_VALIDATOR);
     if ( numPartitions == 1 ) { //
-      canSpill = false;
-      logger.warn("Spilling is disabled due to configuration setting of num_partitions to 1");
+      disableSpilling("Spilling is disabled due to configuration setting of num_partitions to 1");
     }
 
     numPartitions = BaseAllocator.nextPowerOfTwo(numPartitions); // in case not a power of 2
-
-    this.allocator = oContext.getAllocator();
 
     final long memLimit = context.getOptions().getOption(ExecConstants.HASHJOIN_MAX_MEMORY_VALIDATOR);
 

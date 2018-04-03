@@ -208,7 +208,7 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     int pos = currentBatch.appendRow(buildContainer,ind);
     currHVVector.getMutator().set(pos, hashCode);   // store the hash value in the new column
     if ( pos + 1 == RECORDS_PER_BATCH ) {
-      boolean needsSpill = isSpilled || calc.shouldSpill();
+      boolean needsSpill = isSpilled || (calc != null && calc.shouldSpill());
       completeAnInnerBatch(true, needsSpill);
     }
   }
