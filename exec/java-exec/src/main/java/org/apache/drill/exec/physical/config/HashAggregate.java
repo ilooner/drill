@@ -18,6 +18,8 @@
 package org.apache.drill.exec.physical.config;
 
 import org.apache.drill.common.logical.data.NamedExpression;
+import org.apache.drill.exec.ExecConstants;
+import org.apache.drill.exec.ops.QueryContext;
 import org.apache.drill.exec.physical.base.AbstractSingle;
 import org.apache.drill.exec.physical.base.PhysicalOperator;
 import org.apache.drill.exec.physical.base.PhysicalVisitor;
@@ -96,7 +98,13 @@ public class HashAggregate extends AbstractSingle {
   /**
    * The Hash Aggregate operator supports spilling
    * @return true
+   * @param queryContext
    */
   @Override
-  public boolean isBufferedOperator() { return true; }
+  public boolean isBufferedOperator(QueryContext queryContext) {
+    if ( queryContext != null && 1 == (int)queryContext.getOptions().getOption(ExecConstants.HASHAGG_NUM_PARTITIONS_VALIDATOR) ) {
+      return false;
+    }
+    return true;
+  }
 }

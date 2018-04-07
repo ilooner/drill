@@ -22,7 +22,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 
 import org.apache.drill.exec.ops.QueryContext;
 import org.apache.drill.exec.physical.PhysicalPlan;
@@ -230,7 +229,7 @@ public class ThrottledResourceManager extends AbstractResourceManager {
       @Override
       public Void visitOp(PhysicalOperator op, List<PhysicalOperator> value)
           throws RuntimeException {
-        if (op.isBufferedOperator()) {
+        if (op.isBufferedOperator(null)) {
           value.add(op);
         }
         visitChildren(op, value);

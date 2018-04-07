@@ -646,8 +646,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           int currPart = hashCode & partitionMask ;
           hashCode >>>= bitsInMask;
           // Append the new inner row to the appropriate partition; spill (that partition) if needed
-          partitions[currPart].appendInnerRow(buildBatch.getContainer(), ind, hashCode,
-            canSpill ? buildCalc : null); // may spill if needed
+          partitions[currPart].appendInnerRow(buildBatch.getContainer(), ind, hashCode, buildCalc); // may spill if needed
         }
 
         if ( read_HV_vector != null ) {
