@@ -440,8 +440,9 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         throw new SchemaChangeException(errorMsg);
       }
     }
-    final HashTableConfig htConfig = new HashTableConfig((int) context.getOptions().getOption(ExecConstants.MIN_HASH_TABLE_SIZE), HashTable.DEFAULT_LOAD_FACTOR, rightExpr, leftExpr, comparators);
 
+    final HashTableConfig htConfig = new HashTableConfig((int) context.getOptions().getOption(ExecConstants.MIN_HASH_TABLE_SIZE),
+      true, HashTable.DEFAULT_LOAD_FACTOR, rightExpr, leftExpr, comparators);
 
     // Create the chained hash table
     baseHashTable =

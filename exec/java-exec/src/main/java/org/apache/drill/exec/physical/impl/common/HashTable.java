@@ -105,6 +105,16 @@ public interface HashTable {
   void clear();
 
   /**
+   * Update the initial capacity for the hash table. This method will be removed after the key vectors are removed from the hash table. It is used
+   * to allocate {@link HashTableTemplate.BatchHolder}s of appropriate size when the final size of the HashTable is known.
+   *
+   * <b>Warning!</b> Only call this method before you have inserted elements into the HashTable.
+   *
+   * @param initialCapacity The new initial capacity to use.
+   */
+  void updateInitialCapacity(int initialCapacity);
+
+  /**
    * Changes the incoming probe and build side batches, and then updates all the value vector references in the {@link HashTableTemplate.BatchHolder}s.
    * @param newIncoming The new build side batch.
    * @param newIncomingProbe The new probe side batch.

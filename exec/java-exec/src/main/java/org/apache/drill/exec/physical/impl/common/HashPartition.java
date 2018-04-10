@@ -142,6 +142,7 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     } catch (SchemaChangeException sce) {
       throw new IllegalStateException("Unexpected Schema Change while creating a hash table",sce);
     }
+
     this.hjHelper = new HashJoinHelper(context, allocator);
     tmpBatchesList = new ArrayList<>();
     allocateNewCurrentBatchAndHV();
@@ -439,11 +440,20 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
   }
 
   /**
-   *
+   * Creates the hash table and join helper for this partition. This method should only be called after all the build side records
+   * have been consumed.
    */
   public void buildContainersHashTableAndHelper() throws SchemaChangeException {
     if ( isSpilled ) { return; } // no building for spilled partitions
     containers = new ArrayList<>();
+    hashTable.updateInitialCapacity((int) getNumInMemoryRecords());
+
+    int now = 0;
+    for (int curr = 0; curr < partitionBatchesCount; curr++) {
+      VectorContainer nextBatch = tmpBatchesList.get(curr);
+      now += nextBatch.getRecordCount();
+    }
+
     for (int curr = 0; curr < partitionBatchesCount; curr++) {
       VectorContainer nextBatch = tmpBatchesList.get(curr);
       final int currentRecordCount = nextBatch.getRecordCount();
