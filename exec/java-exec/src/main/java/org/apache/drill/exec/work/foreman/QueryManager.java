@@ -71,10 +71,7 @@ public class QueryManager implements AutoCloseable {
   private final RunQuery runQuery;
   private final Foreman foreman;
 
-  /*
-   * Doesn't need to be thread safe as fragmentDataMap is generated in a single thread and then
-   * accessed by multiple threads for reads only.
-   */
+  private final Object fragmentDataLock = new Object();
   private final IntObjectHashMap<IntObjectHashMap<FragmentData>> fragmentDataMap =
       new IntObjectHashMap<>();
   private final List<FragmentData> fragmentDataSet = Lists.newArrayList();
@@ -129,7 +126,11 @@ public class QueryManager implements AutoCloseable {
     final FragmentHandle fragmentHandle = fragmentStatus.getHandle();
     final int majorFragmentId = fragmentHandle.getMajorFragmentId();
     final int minorFragmentId = fragmentHandle.getMinorFragmentId();
-    final FragmentData data = fragmentDataMap.get(majorFragmentId).get(minorFragmentId);
+    final FragmentData data;
+
+    synchronized (fragmentDataLock) {
+      data = fragmentDataMap.get(majorFragmentId).get(minorFragmentId);
+    }
 
     final FragmentState oldState = data.getState();
     final boolean inTerminalState = isTerminal(oldState);
@@ -146,7 +147,7 @@ public class QueryManager implements AutoCloseable {
     return oldState != currentState;
   }
 
-  private void fragmentDone(final FragmentStatus status) {
+  private synchronized void fragmentDone(final FragmentStatus status) {
     final boolean stateChanged = updateFragmentStatus(status);
 
     if (stateChanged) {
@@ -162,17 +163,21 @@ public class QueryManager implements AutoCloseable {
     final int majorFragmentId = fragmentHandle.getMajorFragmentId();
     final int minorFragmentId = fragmentHandle.getMinorFragmentId();
 
-    IntObjectHashMap<FragmentData> minorMap = fragmentDataMap.get(majorFragmentId);
-    if (minorMap == null) {
-      minorMap = new IntObjectHashMap<>();
-      fragmentDataMap.put(majorFragmentId, minorMap);
+    synchronized (fragmentDataLock) {
+      IntObjectHashMap<FragmentData> minorMap = fragmentDataMap.get(majorFragmentId);
+      if (minorMap == null) {
+        minorMap = new IntObjectHashMap<>();
+        fragmentDataMap.put(majorFragmentId, minorMap);
+      }
+      minorMap.put(minorFragmentId, fragmentData);
+      fragmentDataSet.add(fragmentData);
     }
-    minorMap.put(minorFragmentId, fragmentData);
-    fragmentDataSet.add(fragmentData);
   }
 
   public String getFragmentStatesAsString() {
-    return fragmentDataMap.toString();
+    synchronized (fragmentDataLock) {
+      return fragmentDataMap.toString();
+    }
   }
 
   void addFragmentStatusTracker(final PlanFragment fragment, final boolean isRoot) {
@@ -201,24 +206,26 @@ public class QueryManager implements AutoCloseable {
   void cancelExecutingFragments(final DrillbitContext drillbitContext) {
     @SuppressWarnings("resource")
     final Controller controller = drillbitContext.getController();
-    for(final FragmentData data : fragmentDataSet) {
-      switch(data.getState()) {
-      case SENDING:
-      case AWAITING_ALLOCATION:
-      case RUNNING:
-        final FragmentHandle handle = data.getHandle();
-        final DrillbitEndpoint endpoint = data.getEndpoint();
-        // TODO is the CancelListener redundant? Does the FragmentStatusListener get notified of the same?
-        controller.getTunnel(endpoint).cancelFragment(new SignalListener(endpoint, handle,
-            SignalListener.Signal.CANCEL), handle);
-        break;
 
-      case FINISHED:
-      case CANCELLATION_REQUESTED:
-      case CANCELLED:
-      case FAILED:
-        // nothing to do
-        break;
+    synchronized (fragmentDataLock) {
+      for (final FragmentData data : fragmentDataSet) {
+        switch (data.getState()) {
+          case SENDING:
+          case AWAITING_ALLOCATION:
+          case RUNNING:
+            final FragmentHandle handle = data.getHandle();
+            final DrillbitEndpoint endpoint = data.getEndpoint();
+            // TODO is the CancelListener redundant? Does the FragmentStatusListener get notified of the same?
+            controller.getTunnel(endpoint).cancelFragment(new SignalListener(endpoint, handle, SignalListener.Signal.CANCEL), handle);
+            break;
+
+          case FINISHED:
+          case CANCELLATION_REQUESTED:
+          case CANCELLED:
+          case FAILED:
+            // nothing to do
+            break;
+        }
       }
     }
   }
@@ -230,11 +237,13 @@ public class QueryManager implements AutoCloseable {
   void unpauseExecutingFragments(final DrillbitContext drillbitContext) {
     @SuppressWarnings("resource")
     final Controller controller = drillbitContext.getController();
-    for(final FragmentData data : fragmentDataSet) {
-      final DrillbitEndpoint endpoint = data.getEndpoint();
-      final FragmentHandle handle = data.getHandle();
-      controller.getTunnel(endpoint).unpauseFragment(new SignalListener(endpoint, handle,
-        SignalListener.Signal.UNPAUSE), handle);
+    synchronized (fragmentDataLock) {
+      for (final FragmentData data : fragmentDataSet) {
+        final DrillbitEndpoint endpoint = data.getEndpoint();
+        final FragmentHandle handle = data.getHandle();
+        controller.getTunnel(endpoint)
+          .unpauseFragment(new SignalListener(endpoint, handle, SignalListener.Signal.UNPAUSE), handle);
+      }
     }
   }
 
@@ -344,43 +353,45 @@ public class QueryManager implements AutoCloseable {
   }
 
   private QueryProfile getQueryProfile(UserException ex) {
-    final QueryProfile.Builder profileBuilder = QueryProfile.newBuilder()
-        .setUser(foreman.getQueryContext().getQueryUserName())
-        .setType(runQuery.getType())
-        .setId(queryId)
-        .setState(foreman.getState())
-        .setForeman(foreman.getQueryContext().getCurrentEndpoint())
-        .setStart(startTime)
-        .setEnd(endTime)
-        .setPlanEnd(planningEndTime)
-        .setQueueWaitEnd(queueWaitEndTime)
-        .setTotalFragments(fragmentDataSet.size())
-        .setFinishedFragments(finishedFragments.get())
-        .setTotalCost(totalCost)
-        .setQueueName(queueName == null ? "-" : queueName)
-        .setOptionsJson(getQueryOptionsAsJson());
+    synchronized (fragmentDataLock) {
+      final QueryProfile.Builder profileBuilder = QueryProfile.newBuilder()
+          .setUser(foreman.getQueryContext().getQueryUserName())
+          .setType(runQuery.getType())
+          .setId(queryId)
+          .setState(foreman.getState())
+          .setForeman(foreman.getQueryContext().getCurrentEndpoint())
+          .setStart(startTime)
+          .setEnd(endTime)
+          .setPlanEnd(planningEndTime)
+          .setQueueWaitEnd(queueWaitEndTime)
+          .setTotalFragments(fragmentDataSet.size())
+          .setFinishedFragments(finishedFragments.get())
+          .setTotalCost(totalCost)
+          .setQueueName(queueName == null ? "-" : queueName)
+          .setOptionsJson(getQueryOptionsAsJson());
 
-    if (ex != null) {
-      profileBuilder.setError(ex.getMessage(false));
-      profileBuilder.setVerboseError(ex.getVerboseMessage(false));
-      profileBuilder.setErrorId(ex.getErrorId());
-      if (ex.getErrorLocation() != null) {
-        profileBuilder.setErrorNode(ex.getErrorLocation());
+      if (ex != null) {
+        profileBuilder.setError(ex.getMessage(false));
+        profileBuilder.setVerboseError(ex.getVerboseMessage(false));
+        profileBuilder.setErrorId(ex.getErrorId());
+        if (ex.getErrorLocation() != null) {
+          profileBuilder.setErrorNode(ex.getErrorLocation());
+        }
       }
+
+      if (planText != null) {
+        profileBuilder.setPlan(planText);
+      }
+
+      final String queryText = foreman.getQueryText();
+      if (queryText != null) {
+        profileBuilder.setQuery(queryText);
+      }
+
+      fragmentDataMap.forEach(new OuterIter(profileBuilder));
+
+      return profileBuilder.build();
     }
-
-    if (planText != null) {
-      profileBuilder.setPlan(planText);
-    }
-
-    final String queryText = foreman.getQueryText();
-    if (queryText != null) {
-      profileBuilder.setQuery(queryText);
-    }
-
-    fragmentDataMap.forEach(new OuterIter(profileBuilder));
-
-    return profileBuilder.build();
   }
 
   private String getQueryOptionsAsJson() {
@@ -517,8 +528,10 @@ public class QueryManager implements AutoCloseable {
       // this target state may be adjusted in moveToState() based on current FAILURE/CANCELLATION_REQUESTED status
       foreman.addToEventQueue(QueryState.COMPLETED, null);
     } else {
-      logger.debug("Foreman is still waiting for completion message from {} nodes containing {} fragments", remaining,
-          this.fragmentDataSet.size() - finishedFragments.get());
+      synchronized (fragmentDataLock) {
+        logger.debug("Foreman is still waiting for completion message from {} nodes containing {} fragments",
+          remaining, this.fragmentDataSet.size() - finishedFragments.get());
+      }
     }
   }
 

@@ -226,31 +226,18 @@ public class Accountant implements AutoCloseable {
     final long beyondReservation = newLocal - reservation;
     boolean beyondLimit = newLocal > allocationLimit.get();
 
-    // Non-strict allocation
-
-    if (beyondLimit && lenient) {
-      long grace = Math.min(MAX_GRACE, allocationLimit.get() * GRACE_MARGIN);
-      long graceLimit = allocationLimit.get() + grace;
-      beyondLimit = newLocal > graceLimit;
-      if (! beyondLimit) {
-        logger.warn("Excess allocation of {} bytes beyond limit of {}, " +
-                    "within grace of {}, new total allocation: {}",
-            size, allocationLimit.get(), grace, newLocal);
-      }
-    }
-    final boolean updatePeak = forceAllocation || (incomingUpdatePeak && !beyondLimit);
-
     AllocationOutcome parentOutcome = AllocationOutcome.SUCCESS;
     if (beyondReservation > 0 && parent != null) {
       // we need to get memory from our parent.
       final long parentRequest = Math.min(beyondReservation, size);
-      parentOutcome = parent.allocate(parentRequest, updatePeak, forceAllocation);
+      parentOutcome = parent.allocate(parentRequest, true, forceAllocation);
     }
 
     final AllocationOutcome finalOutcome = beyondLimit ? AllocationOutcome.FAILED_LOCAL :
         parentOutcome.ok ? AllocationOutcome.SUCCESS : AllocationOutcome.FAILED_PARENT;
 
-    if (updatePeak) {
+    if (finalOutcome.equals(AllocationOutcome.SUCCESS) ||
+        finalOutcome.equals(AllocationOutcome.FORCED_SUCESS)) {
       updatePeak();
     }
 
