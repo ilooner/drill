@@ -259,6 +259,12 @@ public class FragmentExecutor implements Runnable {
       // Make sure the event processor is started at least once
       eventProcessor.start();
 
+      try {
+        Thread.sleep(5000);
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+
       // here we could be in FAILED, RUNNING, or CANCELLATION_REQUESTED
       // FAILED state will be because of any Exception in execution loop root.next()
       // CANCELLATION_REQUESTED because of a CANCEL request received by Foreman.

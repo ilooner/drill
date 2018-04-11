@@ -51,7 +51,7 @@ public class FragmentData {
    * Update the status for this fragment. Also records last update and last progress time.
    * @param newStatus Updated status
    */
-  public void setStatus(final FragmentStatus newStatus) {
+  public synchronized void setStatus(final FragmentStatus newStatus) {
     final long time = System.currentTimeMillis();
     lastStatusUpdate = time;
     if (madeProgress(status, newStatus)) {
@@ -60,11 +60,11 @@ public class FragmentData {
     status = newStatus;
   }
 
-  public FragmentState getState() {
+  public synchronized FragmentState getState() {
     return status.getProfile().getState();
   }
 
-  public MinorFragmentProfile getProfile() {
+  public synchronized MinorFragmentProfile getProfile() {
     return status
         .getProfile()
         .toBuilder()
@@ -81,7 +81,7 @@ public class FragmentData {
     return endpoint;
   }
 
-  public FragmentHandle getHandle() {
+  public synchronized FragmentHandle getHandle() {
     return status.getHandle();
   }
 

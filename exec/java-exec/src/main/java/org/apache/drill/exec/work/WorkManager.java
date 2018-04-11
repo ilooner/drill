@@ -90,7 +90,7 @@ public class WorkManager implements AutoCloseable {
   /**
    * How often the StatusThread collects statistics about running fragments.
    */
-  private final static int STATUS_PERIOD_SECONDS = 5;
+  private final static int STATUS_PERIOD_SECONDS = 1;
 
   public WorkManager(final BootStrapContext context) {
     this.bContext = context;
