@@ -72,7 +72,7 @@
     <dependency>
       <groupId>de.flapdoodle.embed</groupId>
       <artifactId>de.flapdoodle.embed.mongo</artifactId>
-      <version>1.50.5</version>
+      <version>2.0.3</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -98,6 +98,11 @@
               <value>${project.build.directory}/surefire-reports</value>
             </property>
           </systemProperties>
+          <environmentVariables>
+            <LANG>en_US.UTF-8</LANG>
+            <LANGUAGE>en_US</LANGUAGE>
+            <LC_ALL>en_US.UTF-8</LC_ALL>
+          </environmentVariables>
         </configuration>
       </plugin>
     </plugins>
