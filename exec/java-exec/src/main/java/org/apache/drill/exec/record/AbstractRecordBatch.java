@@ -43,6 +43,14 @@ public abstract class AbstractRecordBatch<T extends PhysicalOperator> implements
   protected final OperatorStats stats;
   protected final boolean unionTypeEnabled;
 
+  // TODO find a less messy way to solve this problem. Probably refactoring operators NOT to manipulate the way
+  // next() processes records would be the best thing to do moving forward.
+  /**
+   * When false, the number of records read from a batch in the {@link #next()} method are added to the
+   * {@link org.apache.drill.exec.ops.OperatorStats}. When true, the number of records are not added to
+   * the current record count in the {@link org.apache.drill.exec.ops.OperatorStats}.
+   */
+  protected boolean skipRecordCount;
   protected BatchState state;
 
   protected AbstractRecordBatch(final T popConfig, final FragmentContext context) throws OutOfMemoryException {
@@ -119,6 +127,11 @@ public abstract class AbstractRecordBatch<T extends PhysicalOperator> implements
       next = b.next();
     } finally {
       stats.startProcessing();
+    }
+
+    if (skipRecordCount) {
+      // Do not include record counts.
+      return next;
     }
 
     switch(next) {

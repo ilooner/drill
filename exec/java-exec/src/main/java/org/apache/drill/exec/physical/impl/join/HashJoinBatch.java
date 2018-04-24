@@ -361,6 +361,11 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
             changeToFinalProbeState();
           }
 
+          if (cycleNum == 0) {
+            // Prevent double counting of records when reading spilled batches.
+            this.skipRecordCount = true;
+          }
+
           // update the cycle num if needed
           // The current cycle num should always be one larger than in the spilled partition
           if (cycleNum == currSp.cycleNum) {
