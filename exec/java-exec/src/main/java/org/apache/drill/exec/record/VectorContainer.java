@@ -279,8 +279,10 @@ public class VectorContainer implements VectorAccessible {
           "Src container count " + buildSrcContainer.getRecordCount() + "\n" +
           "Build src index " + buildSrcIndex + "\n" +
           "Build src buff size " + srcVector.getValueCapacity() + "\n" +
-          "Dest buff size " + destVector.getValueCapacity() + "\n";
-        throw new IndexOutOfBoundsException(message);
+          "Dest buff size " + destVector.getValueCapacity() + "\n" + e.getMessage();
+        IndexOutOfBoundsException newEx = new IndexOutOfBoundsException(message);
+        newEx.setStackTrace(e.getStackTrace());
+        throw newEx;
       }
     }
     return lastIndex;
