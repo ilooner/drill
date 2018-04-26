@@ -58,8 +58,10 @@ import org.apache.drill.exec.record.BatchSchema;
 import org.apache.drill.exec.record.MaterializedField;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.VectorWrapper;
+import org.apache.drill.exec.vector.FixedWidthVector;
 import org.apache.drill.exec.vector.IntVector;
 import org.apache.drill.exec.vector.ValueVector;
+import org.apache.drill.exec.vector.VariableWidthVector;
 import org.apache.drill.exec.vector.complex.AbstractContainerVector;
 import org.apache.calcite.rel.core.JoinRelType;
 
@@ -784,9 +786,18 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   }
 
   private void allocateVectors() {
-    for (final VectorWrapper<?> v : container) {
-      v.getValueVector().allocateNew();
+    for (final VectorWrapper<?> vectorWrapper : container) {
+      ValueVector valueVector = vectorWrapper.getValueVector();
+
+      if (valueVector instanceof FixedWidthVector) {
+        ((FixedWidthVector) valueVector).allocateNew(TARGET_RECORDS_PER_BATCH);
+      } else if (valueVector instanceof VariableWidthVector) {
+        ((VariableWidthVector) valueVector).allocateNew(8 * TARGET_RECORDS_PER_BATCH, TARGET_RECORDS_PER_BATCH);
+      } else {
+        valueVector.allocateNew();
+      }
     }
+
     container.setRecordCount(0); // reset container's counter back to zero records
   }
 
