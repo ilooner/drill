@@ -270,20 +270,7 @@ public class VectorContainer implements VectorAccessible {
     for (int vectorIndex = 0; vectorIndex < lastIndex; vectorIndex++) {
       ValueVector destVector = wrappers.get(vectorIndex).getValueVector();
       ValueVector srcVector = buildSrcContainer.wrappers.get(vectorIndex).getValueVector();
-      try {
-        destVector.copyEntry(recordCount, srcVector, buildSrcIndex);
-      } catch (IndexOutOfBoundsException e) {
-        String message = "Dest record count " + recordCount + "\n" +
-          "Dest vector record count " + destVector.getAccessor().getValueCount() + "\n" +
-          "Src vector record count " + srcVector.getAccessor().getValueCount() + "\n" +
-          "Src container count " + buildSrcContainer.getRecordCount() + "\n" +
-          "Build src index " + buildSrcIndex + "\n" +
-          "Build src buff size " + srcVector.getValueCapacity() + "\n" +
-          "Dest buff size " + destVector.getValueCapacity() + "\n" + e.getMessage();
-        IndexOutOfBoundsException newEx = new IndexOutOfBoundsException(message);
-        newEx.setStackTrace(e.getStackTrace());
-        throw newEx;
-      }
+      destVector.copyEntry(recordCount, srcVector, buildSrcIndex);
     }
     return lastIndex;
   }
