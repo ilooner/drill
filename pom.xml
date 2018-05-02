@@ -617,7 +617,7 @@
             <systemPropertyVariables>
               <java.io.tmpdir>${project.build.directory}</java.io.tmpdir>
             </systemPropertyVariables>
-            <excludedGroups>${excludedGroups}</excludedGroups>
+            <groups>org.apache.drill.categories.MongoStorageTest</groups>
           </configuration>
         </plugin>
         <plugin>

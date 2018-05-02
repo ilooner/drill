@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.Lists;
@@ -94,7 +95,7 @@ public class MongoTestSuit implements MongoTestConstants {
       configServers.add(crateConfigServerConfig(CONFIG_SERVER_3_PORT));
 
       // creating replicaSets
-      Map<String, List<IMongodConfig>> replicaSets = new HashMap<>();
+      Map<String, List<IMongodConfig>> replicaSets = new TreeMap<>();
       List<IMongodConfig> replicaSet1 = new ArrayList<>();
       replicaSet1.add(crateIMongodConfig(MONGOD_1_PORT, false,
           REPLICA_SET_1_NAME));
