@@ -20,7 +20,6 @@ package org.apache.drill.exec.store.mongo;
 import java.io.IOException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -95,6 +94,7 @@ public class MongoTestSuit implements MongoTestConstants {
       configServers.add(crateConfigServerConfig(CONFIG_SERVER_3_PORT));
 
       // creating replicaSets
+      // A TreeMap ensures that the config servers are started first.
       Map<String, List<IMongodConfig>> replicaSets = new TreeMap<>();
       List<IMongodConfig> replicaSet1 = new ArrayList<>();
       replicaSet1.add(crateIMongodConfig(MONGOD_1_PORT, false,
