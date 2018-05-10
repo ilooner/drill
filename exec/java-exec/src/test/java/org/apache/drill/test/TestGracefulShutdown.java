@@ -44,7 +44,7 @@ import static org.junit.Assert.fail;
 public class TestGracefulShutdown extends BaseTestQuery {
 
   @Rule
-  public final TestRule TIMEOUT = TestTools.getTimeoutRule(180_000);
+  public final TestRule TIMEOUT = TestTools.getTimeoutRule(240_000);
 
   public static final int WAIT_TIMEOUT_MS = WorkManager.EXIT_TIMEOUT_MS + 30_000;
 

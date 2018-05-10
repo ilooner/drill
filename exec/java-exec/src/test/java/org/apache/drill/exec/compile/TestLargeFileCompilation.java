@@ -29,7 +29,7 @@ import org.junit.rules.TestRule;
 
 @Category({SlowTest.class})
 public class TestLargeFileCompilation extends BaseTestQuery {
-  @Rule public final TestRule TIMEOUT = TestTools.getTimeoutRule(150000); // 150secs
+  @Rule public final TestRule TIMEOUT = TestTools.getTimeoutRule(210_000);
 
   private static final String LARGE_QUERY_GROUP_BY;
 
