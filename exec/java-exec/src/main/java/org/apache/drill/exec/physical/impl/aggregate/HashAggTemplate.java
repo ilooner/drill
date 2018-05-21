@@ -507,7 +507,7 @@ public abstract class HashAggTemplate implements HashAggregator {
     for (int columnIndex = 0; columnIndex < numGroupByOutFields; columnIndex++) {
       final VectorWrapper vectorWrapper = outContainer.getValueVector(columnIndex);
       final String columnName = vectorWrapper.getField().getName();
-      final int columnSize = columnSizeMap.get(columnName).getStdOrEstSize();
+      final int columnSize = columnSizeMap.get(columnName).getStdNetOrNetSizePerEntry();
       keySizes.put(columnName, columnSize);
       estAccumulationBatchRowWidth += columnSize;
     }
@@ -563,7 +563,7 @@ public abstract class HashAggTemplate implements HashAggregator {
               final VectorWrapper columnWrapper = incoming.getValueAccessorById(null, valueExpression.getFieldId().getFieldIds());
               final String columnName = columnWrapper.getField().getName();
               final RecordBatchSizer.ColumnSize columnSizer = columnSizeMap.get(columnName);
-              varcharValueSizes.put(numGroupByOutFields + valueIndex, columnSizer.estSize);
+              varcharValueSizes.put(numGroupByOutFields + valueIndex, columnSizer.getStdNetSizePerEntry());
               break;
             }
           }
@@ -571,16 +571,18 @@ public abstract class HashAggTemplate implements HashAggregator {
       }
     }
 
+    final RecordBatchSizer batchSizer = new RecordBatchSizer(outContainer);
+
     for (int columnIndex = numGroupByOutFields; columnIndex < outContainer.getNumberOfColumns(); columnIndex++) {
       VectorWrapper vectorWrapper = outContainer.getValueVector(columnIndex);
-      RecordBatchSizer.ColumnSize columnSize = new RecordBatchSizer.ColumnSize(vectorWrapper.getValueVector());
+      RecordBatchSizer.ColumnSize columnSize = batchSizer.columns().get(vectorWrapper.getField().getName());
 
-      if (columnSize.hasStdSize()) {
+      if (columnSize.hasStdDataSize()) {
         // If the column is fixed width we know the size, otherwise the column is a varchar which is
         // stored on heap in the BatchHolders so we can assume that the amount of direct memory it consumes is 0.
-        estAccumulationBatchRowWidth += columnSize.getStdSize();
-        estBatchHolderValuesRowWidth += columnSize.getStdSize();
-        estOutputValuesRowWidth += columnSize.getStdSize();
+        estAccumulationBatchRowWidth += columnSize.getStdNetSizePerEntry();
+        estBatchHolderValuesRowWidth += columnSize.getStdNetSizePerEntry();
+        estOutputValuesRowWidth += columnSize.getStdNetSizePerEntry();
       } else {
         // Include the size of varchar values which are transfered back to direct memory when copied from the BatchHolder to
         // the out container.
@@ -784,17 +786,19 @@ public abstract class HashAggTemplate implements HashAggregator {
     useReservedOutgoingMemory();
     long allocatedBefore = allocator.getAllocatedMemory();
 
+    RecordBatchSizer batchSizer = new RecordBatchSizer(outContainer);
+
     for (int columnIndex = numGroupByOutFields; columnIndex < outContainer.getNumberOfColumns(); columnIndex++) {
       final VectorWrapper wrapper = outContainer.getValueVector(columnIndex);
       @SuppressWarnings("resource")
       final ValueVector vv = wrapper.getValueVector();
 
-      final RecordBatchSizer.ColumnSize columnSizer = new RecordBatchSizer.ColumnSize(wrapper.getValueVector());
+      final RecordBatchSizer.ColumnSize columnSizer = batchSizer.columns().get(vv.getField().getName());
       int columnSize;
 
-      if (columnSizer.hasStdSize()) {
+      if (columnSizer.hasStdDataSize()) {
         // For fixed width vectors we know the size of each record
-        columnSize = columnSizer.getStdSize();
+        columnSize = columnSizer.getStdNetSizePerEntry();
       } else {
         // For var chars we need to use the input estimate
         columnSize = varcharValueSizes.get(columnIndex);
