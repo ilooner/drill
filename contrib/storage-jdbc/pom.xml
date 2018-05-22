@@ -164,6 +164,7 @@
                   <type>zip</type>
                   <overWrite>false</overWrite>
                   <outputDirectory>${project.build.directory}/mysql-dist</outputDirectory>
+                  <silent>true</silent>
                 </artifactItem>
               </artifactItems>
             </configuration>
