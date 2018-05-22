@@ -26,6 +26,7 @@ public class HashAggPartitionImpl implements HashAggPartition {
 
   private VectorSerializer.Writer writer;
   private int spilledBatchesCount;
+  private String spillFile;
 
   public HashAggPartitionImpl(final SpillSet spillSet,
                               final ChainedHashTable baseHashTable,
@@ -47,54 +48,17 @@ public class HashAggPartitionImpl implements HashAggPartition {
   }
 
   public void close() {
-    /*
+    hashTable.clear();
 
-    if ( schema == null ) { return; } // not set up; nothing to clean
-    if ( is2ndPhase && spillSet.getWriteBytes() > 0 ) {
-      stats.setLongStat(Metric.SPILL_MB, // update stats - total MB spilled
-          (int) Math.round(spillSet.getWriteBytes() / 1024.0D / 1024.0));
+    for (HashAggTemplate.BatchHolder batchHolder: batchHolders) {
+      batchHolder.clear();
     }
-    // clean (and deallocate) each partition
-    for ( int i = 0; i < numPartitions; i++) {
-          if (htables[i] != null) {
-              htables[i].clear();
-              htables[i] = null;
-          }
-          if ( batchHolders[i] != null) {
-              for (BatchHolder bh : batchHolders[i]) {
-                    bh.clear();
-              }
-              batchHolders[i].clear();
-              batchHolders[i] = null;
-          }
 
-          // delete any (still active) output spill file
-          if ( writers[i] != null && spillFiles[i] != null) {
-            try {
-              spillSet.close(writers[i]);
-              writers[i] = null;
-              spillSet.delete(spillFiles[i]);
-              spillFiles[i] = null;
-            } catch(IOException e) {
-              logger.warn("Cleanup: Failed to delete spill file {}", spillFiles[i], e);
-            }
-          }
+    try {
+      spillSet.close(writer);
+      spillSet.delete(spillFile);
+    } catch(IOException e) {
+      logger.warn("Cleanup: Failed to delete spill file {}", spillFile, e);
     }
-    // delete any spill file left in unread spilled partitions
-    while ( ! spilledPartitionsList.isEmpty() ) {
-        SpilledPartition sp = spilledPartitionsList.remove(0);
-        try {
-          spillSet.delete(sp.spillFile);
-        } catch(IOException e) {
-          logger.warn("Cleanup: Failed to delete spill file {}",sp.spillFile);
-        }
-    }
-    // Delete the currently handled (if any) spilled file
-    if ( newIncoming != null ) { newIncoming.close();  }
-    spillSet.close(); // delete the spill directory(ies)
-    htIdxHolder = null;
-    outStartIdxHolder = null;
-    outNumRecordsHolder = null;
-     */
   }
 }

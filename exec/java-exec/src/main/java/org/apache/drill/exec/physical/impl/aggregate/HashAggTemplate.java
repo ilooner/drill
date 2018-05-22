@@ -234,19 +234,19 @@ public abstract class HashAggTemplate implements HashAggregator {
       }
     }
 
-    private boolean updateAggrValues(int incomingRowIdx, int idxWithinBatch) {
+    public boolean updateAggrValues(int incomingRowIdx, int idxWithinBatch) {
       try { updateAggrValuesInternal(incomingRowIdx, idxWithinBatch); }
       catch (SchemaChangeException sc) { throw new UnsupportedOperationException(sc); }
       maxOccupiedIdx = Math.max(maxOccupiedIdx, idxWithinBatch);
       return true;
     }
 
-    private void setup() {
+    public void setup() {
       try { setupInterior(incoming, outgoing, aggrValuesContainer); }
       catch (SchemaChangeException sc) { throw new UnsupportedOperationException(sc);}
     }
 
-    private void outputValues(IndexPointer outStartIdxHolder, IndexPointer outNumRecordsHolder) {
+    public void outputValues(IndexPointer outStartIdxHolder, IndexPointer outNumRecordsHolder) {
       outStartIdxHolder.value = batchOutputCount;
       outNumRecordsHolder.value = 0;
       for (int i = batchOutputCount; i <= maxOccupiedIdx; i++) {
@@ -258,15 +258,15 @@ public abstract class HashAggTemplate implements HashAggregator {
       }
     }
 
-    private void clear() {
+    public void clear() {
       aggrValuesContainer.clear();
     }
 
-    private int getNumGroups() {
+    public int getNumGroups() {
       return maxOccupiedIdx + 1;
     }
 
-    private int getNumPendingOutput() {
+    public int getNumPendingOutput() {
       return getNumGroups() - batchOutputCount;
     }
 
