@@ -137,7 +137,7 @@ public final class ExecConstants {
   public static final LongValidator HASHAGG_MIN_BATCHES_PER_PARTITION_VALIDATOR = new RangeLongValidator(HASHAGG_MIN_BATCHES_PER_PARTITION_KEY, 1, 5);
   // Can be turned off mainly for testing. Memory prediction is used to decide on when to spill to disk; with this option off,
   // spill would be triggered only by another mechanism -- "catch OOMs and then spill".
-  public static final String HASHAGG_USE_MEMORY_PREDICTION_KEY = "exec.hashagg.use_memory_prediction";
+  public static final String HASHAGG_USE_MEMORY_PREDICTION_KEY = "exec.hashagg.use_memory_prediction"; // TODO
   public static final BooleanValidator HASHAGG_USE_MEMORY_PREDICTION_VALIDATOR = new BooleanValidator(HASHAGG_USE_MEMORY_PREDICTION_KEY);
 
   public static final String HASHAGG_SPILL_DIRS = "drill.exec.hashagg.spill.directories";
