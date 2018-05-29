@@ -34,7 +34,7 @@ public class HashAggPartitionEvictionPolicyImpl implements HashAggPartitionEvict
    *  @param currPart - The partition that hit the memory limit (gets a priority)
    * @return The partition (number) chosen to be spilled
    */
-  public int chooseAPartitionToFlush(int currPart) {
+  public int chooseAPartitionToSpill(int currPart) {
     Preconditions.checkState(!initialized);
 
     if (phase.isFirstPhase()) {

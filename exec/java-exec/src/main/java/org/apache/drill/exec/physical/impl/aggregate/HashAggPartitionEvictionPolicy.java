@@ -4,5 +4,5 @@ import org.apache.drill.exec.planner.physical.AggPrelBase;
 
 public interface HashAggPartitionEvictionPolicy {
   void initialize(AggPrelBase.OperatorPhase phase, HashAggPartition[] partitions);
-  int chooseAPartitionToFlush(int currPart);
+  int chooseAPartitionToSpill(int currentPartition);
 }

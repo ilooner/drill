@@ -1,13 +1,16 @@
 package org.apache.drill.exec.physical.impl.aggregate;
 
 import org.apache.drill.exec.exception.SchemaChangeException;
+import org.apache.drill.exec.physical.impl.common.HashTable;
 import org.apache.drill.exec.physical.impl.common.HashTableStats;
+import org.apache.drill.exec.physical.impl.common.IndexPointer;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.VectorContainer;
 
 import java.io.IOException;
 
 public interface HashAggPartition {
+  int getPartitionIndex();
   void initializeSetup(RecordBatch newIncoming) throws SchemaChangeException, IOException;
   void addStats(HashTableStats hashTableStats);
   int getNumInMemoryBatches();
@@ -33,9 +36,14 @@ public interface HashAggPartition {
    */
   void closeAndDelete();
 
-  boolean hasBatchesPendingOutput();
   HashAggTemplate.BatchHolder getCurrentPendingBatch();
 
-  boolean outputCurrentPendingBatchValues(VectorContainer outContainer, int outStartIndex, int numRecords, int numExpectedRecords);
-  boolean outputCurrentPendingBatchKeys(VectorContainer outContainer, int outStartIndex, int numRecords, int numExpectedRecords);
+  void outputCurrentPendingBatch(IndexPointer outStartIdxHolder,
+                            IndexPointer outNumRecordsHolder,
+                            VectorContainer outContainer);
+  boolean hasPendingBatches();
+
+  // put(int incomingRowIdx, IndexPointer htIdxHolder, int hashCode)
+
+  HashTable.PutStatus aggregate(int incomingRowIdx, IndexPointer htIdxHolder, int hashTableLocation);
 }
