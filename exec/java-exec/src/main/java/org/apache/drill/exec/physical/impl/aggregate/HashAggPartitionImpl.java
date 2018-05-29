@@ -105,7 +105,7 @@ public class HashAggPartitionImpl implements HashAggPartition {
   }
 
   @Override
-  public long getNumSpilledBatches() {
+  public int getNumSpilledBatches() {
     return spilledBatchesCount;
   }
 
@@ -126,6 +126,14 @@ public class HashAggPartitionImpl implements HashAggPartition {
     } catch (SchemaChangeException e) {
       throw new UnsupportedOperationException("Schema changes are unsupported.", e);
     }
+  }
+
+  public boolean hasBatchesPendingOutput() {
+    return outBatchIndex < batchHolders.size();
+  }
+
+  public HashAggTemplate.BatchHolder getCurrentPendingBatch() {
+    return batchHolders.get(outBatchIndex);
   }
 
   /*

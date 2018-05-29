@@ -3,6 +3,7 @@ package org.apache.drill.exec.physical.impl.aggregate;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.physical.impl.common.HashTableStats;
 import org.apache.drill.exec.record.RecordBatch;
+import org.apache.drill.exec.record.VectorContainer;
 
 import java.io.IOException;
 
@@ -15,7 +16,26 @@ public interface HashAggPartition {
   String getSpillFile();
   boolean isSpilled();
   int buildHashCode(int incomingIdx);
-  void close();
-  void closeAndDelete();
+
+  /**
+   * Flushes the records this partition is keeping in memory to disk.
+   */
   void spill();
+
+  /**
+   * Releases the memory used by this partition and closes the writer if this partition spilled data to disk. <b>Note:</b> if this partition spilled data to disk,
+   * the data remains on disk untouched.
+   */
+  void close();
+
+  /**
+   * Does everything that {@link #close()} does except that this also deletes and data spilled to disk.
+   */
+  void closeAndDelete();
+
+  boolean hasBatchesPendingOutput();
+  HashAggTemplate.BatchHolder getCurrentPendingBatch();
+
+  boolean outputCurrentPendingBatchValues(VectorContainer outContainer, int outStartIndex, int numRecords, int numExpectedRecords);
+  boolean outputCurrentPendingBatchKeys(VectorContainer outContainer, int outStartIndex, int numRecords, int numExpectedRecords);
 }

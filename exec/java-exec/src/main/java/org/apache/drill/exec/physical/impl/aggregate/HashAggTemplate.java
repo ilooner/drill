@@ -159,6 +159,7 @@ public abstract class HashAggTemplate implements HashAggregator, HashAggBatchHol
 
   private OperatorStats stats = null;
   private HashTableStats htStats = new HashTableStats();
+  private HashAggPartitionEvictionPolicy evictionPolicy;
 
   public enum Metric implements MetricDef {
 
@@ -773,68 +774,6 @@ public abstract class HashAggTemplate implements HashAggregator, HashAggBatchHol
     incIndex();
   }
 
-  /**
-   * Which partition to choose for flushing out (i.e. spill or return) ?
-   * - The current partition (to which a new bach holder is added) has a priority,
-   *   because its last batch holder is full.
-   * - Also the largest prior spilled partition has some priority, as it is already spilled;
-   *   but spilling too few rows (e.g. a single batch) gets us nothing.
-   * - So the largest non-spilled partition has some priority, to get more memory freed.
-   * Need to weigh the above three options.
-   *
-   *  @param currPart - The partition that hit the memory limit (gets a priority)
-   * @return The partition (number) chosen to be spilled
-   */
-  private int chooseAPartitionToFlush(int currPart) {
-    if ( is1stPhase) {
-      // 1st phase: just use the current partition
-      return currPart;
-    }
-
-    final HashAggPartition currentPartition = partitions[currPart];
-    int currPartSize = currentPartition.getNumInMemoryBatches();
-
-    // first find the largest spilled partition
-    int maxSizeSpilled = -1;
-    int indexMaxSpilled = -1;
-
-    for (int isp = 0; isp < numPartitions; isp++ ) {
-      final HashAggPartition partition = partitions[isp];
-
-      if (partition.isSpilled() && maxSizeSpilled < partition.getNumInMemoryBatches()) {
-        maxSizeSpilled = partition.getNumInMemoryBatches();
-        indexMaxSpilled = isp;
-      }
-    }
-
-    // now find the largest non-spilled partition
-    int maxSize = -1;
-    int indexMax = -1;
-
-    // Use the largest spilled (if found) as a base line, with a factor of 4
-    // TODO what is this factor of 4 used for?
-    if ( indexMaxSpilled > -1 && maxSizeSpilled > 1 ) {
-      indexMax = indexMaxSpilled;
-      maxSize = 4 * maxSizeSpilled ;
-    }
-
-    for (int insp = 0; insp < numPartitions; insp++) {
-      final HashAggPartition partition = partitions[insp];
-
-      if (!partition.isSpilled() && maxSize < partition.getNumInMemoryBatches()) {
-        indexMax = insp;
-        maxSize = partition.getNumInMemoryBatches();
-      }
-    }
-
-    if ( maxSize <= 1 ) { // Can not make progress by spilling a single batch!
-      // TODO we need to change the design so that we cannot enter a memory deadlock like this.
-      return -1; // try skipping this spill
-    }
-    return indexMax;
-  }
-
-
   @Override
   public BatchHolder newBatchHolder() {
     return new BatchHolder();
@@ -874,7 +813,7 @@ public abstract class HashAggTemplate implements HashAggregator, HashAggBatchHol
 
         // If this partition was spilled - spill the rest of it and skip it
         if (partition.isSpilled()) {
-          spillAPartition(nextPartitionToReturn); // spill the rest
+          partition.spill();
           SpilledPartition sp = new SpilledPartition();
           sp.spillFile = partition.getSpillFile();
           sp.spilledBatches = partition.getNumSpilledBatches();
@@ -888,10 +827,9 @@ public abstract class HashAggTemplate implements HashAggregator, HashAggBatchHol
           partitions[nextPartitionToReturn] = null;
 
         } else {
-          currPartition = batchHolders[nextPartitionToReturn];
-          currOutBatchIndex = outBatchIndex[nextPartitionToReturn];
-          // If curr batch (partition X index) is not empty - proceed to return it
-          if (currOutBatchIndex < currPartition.size() && 0 != currPartition.get(currOutBatchIndex).getNumPendingOutput()) {
+          currentPartition = partitions[nextPartitionToReturn];
+          if (currentPartition.hasBatchesPendingOutput() && 0 != currentPartition.getCurrentPendingBatch().getNumPendingOutput()) {
+            // If curr batch (partition X index) is not empty - proceed to return it
             break;
           }
         }
@@ -942,7 +880,8 @@ public abstract class HashAggTemplate implements HashAggregator, HashAggBatchHol
     }
 
     // get the number of records in the batch holder that are pending output
-    int numPendingOutput = currPartition.get(currOutBatchIndex).getNumPendingOutput();
+    final BatchHolder pendingBatch = currentPartition.getCurrentPendingBatch();
+    final int numPendingOutput = currentPartition.getCurrentPendingBatch().getNumPendingOutput();
 
     // The following accounting is for logging, metrics, etc.
     rowsInPartition += numPendingOutput ;
@@ -1075,7 +1014,7 @@ public abstract class HashAggTemplate implements HashAggregator, HashAggBatchHol
     // The hash code is computed once, then its lower bits are used to determine the
     // partition to use, and the higher bits determine the location in the hash table.
     final int hashCode = buildHashCode(incomingRowIdx);
-    final int partitionIndex = hashCode & partitionMask;
+    final int partitionIndex = getPartitionIndex(hashCode);
     final int hashTableLocation = computeHashTableLocation(hashCode);
     final HashAggPartition partition = partitions[partitionIndex];
 
@@ -1084,9 +1023,8 @@ public abstract class HashAggTemplate implements HashAggregator, HashAggBatchHol
 
     // Insert the key columns into the hash table
     // TODO do spill when necessary
-    putStatus = htables[currentPartition].put(incomingRowIdx, htIdxHolder, hashCode);
 
-    long allocatedBeforeAggCol = allocator.getAllocatedMemory();
+    putStatus = htables[currentPartition].put(incomingRowIdx, htIdxHolder, hashCode);
 
     // Add an Aggr batch if needed:
     //
@@ -1094,18 +1032,10 @@ public abstract class HashAggTemplate implements HashAggregator, HashAggBatchHol
     //       then a matching batch (for the aggregate columns) needs to be created
     //
     if ( putStatus == HashTable.PutStatus.NEW_BATCH_ADDED ) {
-      try {
         addBatchHolder(currentPartition);  // allocate a new (internal) values batch
 
         if ( plannedBatches > 0 ) { plannedBatches--; } // just allocated a planned batch
-        long totalAddedMem = allocator.getAllocatedMemory() - allocatedBeforeHTput;
-        long aggValuesAddedMem = allocator.getAllocatedMemory() - allocatedBeforeAggCol;
-        logger.trace("MEMORY CHECK AGG: allocated now {}, added {}, total (with HT) added {}", allocator.getAllocatedMemory(),
-            aggValuesAddedMem, totalAddedMem);
 
-      } catch (OutOfMemoryException exc) {
-          throw new OutOfMemoryException(getOOMErrorMsg("AGGR"), exc);
-      }
     } else if ( putStatus == HashTable.PutStatus.KEY_ADDED_LAST ) {
         // If a batch just became full (i.e. another batch would be allocated soon) -- then need to
         // check (later, see below) if the memory limits are too close, and if so -- then spill !
@@ -1133,7 +1063,7 @@ public abstract class HashAggTemplate implements HashAggregator, HashAggBatchHol
     // TODO use memory calculator here to determine if we need to spill
 
     // Pick a "victim" partition to spill or return
-    int victimPartition = chooseAPartitionToFlush(currentPartition, forceSpill);
+    int victimPartition = evictionPolicy.chooseAPartitionToFlush(currentPartition);
 
     if (is2ndPhase) {
       // TODO do spilling in a loop until desired amount of memory is free.

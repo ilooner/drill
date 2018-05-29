@@ -56,13 +56,7 @@ public class HashAggregate extends AbstractSingle {
     this.cardinality = cardinality;
   }
 
-  public AggregationPhase getAggregationPhase() {
-    /*
-
-    is2ndPhase = hashAggrConfig.getAggregationPhase() == AggPrelBase.OperatorPhase.PHASE_2of2;
-    isTwoPhase = hashAggrConfig.getAggregationPhase() != AggPrelBase.OperatorPhase.PHASE_1of1;
-    is1stPhase = isTwoPhase && ! is2ndPhase ;
-     */
+  public AggPrelBase.OperatorPhase getAggregationPhase() {
     return aggPhase;
   }
 
@@ -113,21 +107,5 @@ public class HashAggregate extends AbstractSingle {
     // In case forced to use a single partition - do not consider this a buffered op (when memory is divided)
     return queryContext == null ||
       1 < (int)queryContext.getOptions().getOption(ExecConstants.HASHAGG_NUM_PARTITIONS_VALIDATOR) ;
-  }
-
-  enum AggregationPhase {
-    SINGLE_PHASE(false),
-    TWO_PHASE_1(true),
-    TWO_PHASE_2(true);
-
-    private boolean isTwoPhase;
-
-    AggregationPhase(boolean isTwoPhase) {
-      this.isTwoPhase = isTwoPhase;
-    }
-
-    public boolean isTwoPhase() {
-      return isTwoPhase;
-    }
   }
 }
