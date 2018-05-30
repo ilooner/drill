@@ -153,12 +153,8 @@ public class HashAggPartitionImpl implements HashAggPartition {
     }
 
     if (putStatus == HashTable.PutStatus.NEW_BATCH_ADDED) {
-      // Add an Aggr batch if needed:
-      //
-      //       In case put() added a new batch (for the keys) inside the hash table,
-      //       then a matching batch (for the aggregate columns) needs to be created
-      //
-      //
+      // In case put() added a new batch (for the keys) inside the hash table,
+      // then a matching batch (for the aggregate columns) needs to be created
       batchHolders.add(batchHolderFactory.newBatchHolder());
     }
 
@@ -171,6 +167,8 @@ public class HashAggPartitionImpl implements HashAggPartition {
     HashAggTemplate.BatchHolder bh = batchHolders.get((currentIdx >>> 16) & HashTable.BATCH_MASK);
     int idxWithinBatch = currentIdx & HashTable.BATCH_MASK;
     bh.updateAggrValues(incomingRowIdx, idxWithinBatch);
+
+    return putStatus;
   }
 
   public HashAggTemplate.BatchHolder getCurrentPendingBatch() {
@@ -200,12 +198,14 @@ public class HashAggPartitionImpl implements HashAggPartition {
   public void spill() {
     logger.debug(HashAggTemplate.HASH_AGG_DEBUG_SPILL, "HashAggregate: Spilling partition part size {}", getNumInMemoryBatches());
 
-    if ( currPartition.size() == 0 ) { return; } // in case empty - nothing to spill
+    if (getNumInMemoryBatches() == 0) {
+      // Nothing to spill
+      return;
+    }
 
     // If this is the first spill for this partition, create an output stream
-    if ( ! isSpilled(part) ) {
-
-      spillFiles[part] = spillSet.getNextSpillFile(cycleNum > 0 ? Integer.toString(cycleNum) : null);
+    if (!isSpilled()) {
+      spillFile = spillSet.getNextSpillFile(cycleNum > 0 ? Integer.toString(cycleNum) : null);
 
       try {
         writers[part] = spillSet.writer(spillFiles[part]);
@@ -251,32 +251,6 @@ public class HashAggPartitionImpl implements HashAggPartition {
     numInMemoryRecords = 0;
     batchHolders.clear();
   }
-
-  /*
-
-  // First free the memory used by the given (spilled) partition (i.e., hash table plus batches)
-  // then reallocate them in pristine state to allow the partition to continue receiving rows
-  private void reinitPartition(int part) {
-    assert htables[part] != null;
-    htables[part].reset();
-    if ( batchHolders[part] != null) {
-      for (HashAggTemplate.BatchHolder bh : batchHolders[part]) {
-        bh.clear();
-      }
-      batchHolders[part].clear();
-    }
-    batchHolders[part] = new ArrayList<HashAggTemplate.BatchHolder>(); // First BatchHolder is created when the first put request is received.
-  }
-   */
-
-
-  /*
-  private void addBatchHolder(int part) {
-
-    BatchHolder bh = newBatchHolder();
-    batchHolders[part].add(bh);
-    bh.setup();
-  }*/
 
   @Override
   public void close() {
