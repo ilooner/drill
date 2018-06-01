@@ -15,6 +15,7 @@ public interface HashAggPartition {
   void addStats(HashTableStats hashTableStats);
   int getNumInMemoryBatches();
   long getNumInMemoryRecords();
+  int getNumSpilledRecords();
   int getNumSpilledBatches();
   String getSpillFile();
   boolean isSpilled();
@@ -46,4 +47,6 @@ public interface HashAggPartition {
   // put(int incomingRowIdx, IndexPointer htIdxHolder, int hashCode)
 
   HashTable.PutStatus aggregate(int incomingRowIdx, IndexPointer htIdxHolder, int hashTableLocation);
+
+  String printStats();
 }

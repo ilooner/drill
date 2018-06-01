@@ -57,7 +57,7 @@ public class TestHashAggrSpill extends DrillTest {
    *
    * @throws Exception
    */
-  private void testSpill(long maxMem, long numPartitions, long minBatches, int maxParallel,
+  private void testSpill(long maxMem, long numPartitions, int maxParallel,
                          boolean fallback, boolean predict, String sql, long expectedRows,
                          int fromCycle, int toCycle, int fromPart, int toPart) throws Exception {
     LogFixture.LogFixtureBuilder logBuilder = LogFixture.builder()
@@ -67,7 +67,6 @@ public class TestHashAggrSpill extends DrillTest {
     ClusterFixtureBuilder builder = ClusterFixture.builder(dirTestWatcher)
       .sessionOption(ExecConstants.HASHAGG_MAX_MEMORY_KEY, maxMem)
       .sessionOption(ExecConstants.HASHAGG_NUM_PARTITIONS_KEY, numPartitions)
-      .sessionOption(ExecConstants.HASHAGG_MIN_BATCHES_PER_PARTITION_KEY, minBatches)
       .configProperty(ExecConstants.SYS_STORE_PROVIDER_LOCAL_ENABLE_WRITE, false)
       .sessionOption(PlannerSettings.FORCE_2PHASE_AGGR_KEY, true)
       .sessionOption(ExecConstants.HASHAGG_FALLBACK_ENABLED_KEY, fallback)
@@ -91,20 +90,8 @@ public class TestHashAggrSpill extends DrillTest {
    */
   @Test
   public void testSimpleHashAggrSpill() throws Exception {
-    testSpill(80_000_000, 16, 2, 2, false,
+    testSpill(80_000_000, 16, 2, false,
       true, null, 1_200_000, 1, 1, 1, 3);
-  }
-
-  /**
-   * Test with "needed memory" prediction turned off
-   * (i.e., do exercise code paths that catch OOMs from the Hash Table and recover)
-   *
-   * @throws Exception
-   */
-  @Test
-  public void testNoPredictHashAggrSpill() throws Exception {
-    testSpill(58_000_000, 16, 2, 2, false,
-      false /* no prediction */, null, 1_200_000, 1, 1, 1, 3);
   }
 
   private void runAndDump(ClientFixture client, String sql, long expectedRows, long fromSpillCycle, long toSpillCycle, long fromSpilledPartitions, long toSpilledPartitions) throws
@@ -134,7 +121,7 @@ public class TestHashAggrSpill extends DrillTest {
   @Test
   public void testHashAggrSecondaryTertiarySpill() throws Exception {
 
-    testSpill(58_000_000, 16, 2, 1, false, true, "SELECT empid_s44, dept_i, branch_i, AVG(salary_i) FROM `mock`.`employee_1100K` GROUP BY empid_s44, dept_i, branch_i",
+    testSpill(58_000_000, 16, 1, false, true, "SELECT empid_s44, dept_i, branch_i, AVG(salary_i) FROM `mock`.`employee_1100K` GROUP BY empid_s44, dept_i, branch_i",
       1_100_000, 3, 4, 2, 2);
   }
 
@@ -147,7 +134,7 @@ public class TestHashAggrSpill extends DrillTest {
   public void testHashAggrFailWithFallbackDisabed() throws Exception {
 
     try {
-      testSpill(34_000_000, 4, 5, 2, false /* no fallback */, true, null,
+      testSpill(34_000_000, 4, 2, false /* no fallback */, true, null,
         1_200_000, 0 /* no spill due to fallback to pre-1.11 */, 0, 0, 0);
       fail(); // in case the above test did not throw
     } catch (Exception ex) {
@@ -165,7 +152,7 @@ public class TestHashAggrSpill extends DrillTest {
    */
   @Test
   public void testHashAggrSuccessWithFallbackEnabled() throws Exception {
-    testSpill(34_000_000, 4, 5, 2, true /* do fallback */, true, null,
+    testSpill(34_000_000, 4, 2, true /* do fallback */, true, null,
       1_200_000, 0 /* no spill due to fallback to pre-1.11 */, 0, 0, 0);
   }
 }

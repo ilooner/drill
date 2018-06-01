@@ -11,11 +11,14 @@ public interface HashAggMemoryCalculator {
 
     int getPartitionCount();
 
+    boolean canSpill();
+
     AggregationCalculator getAggregationCalculator();
   }
 
   interface AggregationCalculator {
     void update(int partitionIndex, HashTable.PutStatus putStatus);
     boolean shouldSpill();
+    String printStats();
   }
 }

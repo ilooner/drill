@@ -48,24 +48,36 @@ import java.util.List;
 public abstract class AggPrelBase extends DrillAggregateRelBase implements Prel {
 
   public enum OperatorPhase {
-    PHASE_1of1(false, true),
-    PHASE_1of2(true, true),
-    PHASE_2of2(true, false);
+    PHASE_1of1(false, true, "Single"),
+    PHASE_1of2(true, true, "1st"),
+    PHASE_2of2(true, false, "2nd");
 
     private boolean isTwoPhase;
     private boolean isFirstPhase;
+    private String name;
 
-    OperatorPhase(boolean isTwoPhase, boolean isFirstPhase) {
+    OperatorPhase(boolean isTwoPhase,
+                  boolean isFirstPhase,
+                  String name) {
       this.isTwoPhase = isTwoPhase;
       this.isFirstPhase = isFirstPhase;
+      this.name = name;
     }
 
     public boolean isTwoPhase() {
-      return this.isTwoPhase;
+      return isTwoPhase;
     }
 
     public boolean isFirstPhase() {
-      return this.isFirstPhase;
+      return isFirstPhase;
+    }
+
+    public boolean isSecondPhase() {
+      return !isFirstPhase;
+    }
+
+    public String getPhaseName() {
+      return name;
     }
   }
 

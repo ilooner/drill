@@ -130,11 +130,6 @@ public final class ExecConstants {
   public static final LongValidator HASHAGG_NUM_PARTITIONS_VALIDATOR = new RangeLongValidator(HASHAGG_NUM_PARTITIONS_KEY, 1, 128); // 1 means - no spilling
   public static final String HASHAGG_MAX_MEMORY_KEY = "exec.hashagg.mem_limit";
   public static final LongValidator HASHAGG_MAX_MEMORY_VALIDATOR = new RangeLongValidator(HASHAGG_MAX_MEMORY_KEY, 0, Integer.MAX_VALUE);
-  // min batches is used for tuning (each partition needs so many batches when planning the number of partitions,
-  // or reserve this number when calculating whether the remaining available memory is too small and requires a spill.)
-  // Low value may OOM (e.g., when incoming rows become wider), higher values use fewer partitions but are safer
-  public static final String HASHAGG_MIN_BATCHES_PER_PARTITION_KEY = "exec.hashagg.min_batches_per_partition";
-  public static final LongValidator HASHAGG_MIN_BATCHES_PER_PARTITION_VALIDATOR = new RangeLongValidator(HASHAGG_MIN_BATCHES_PER_PARTITION_KEY, 1, 5);
   // Can be turned off mainly for testing. Memory prediction is used to decide on when to spill to disk; with this option off,
   // spill would be triggered only by another mechanism -- "catch OOMs and then spill".
   public static final String HASHAGG_USE_MEMORY_PREDICTION_KEY = "exec.hashagg.use_memory_prediction"; // TODO

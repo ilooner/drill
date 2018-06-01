@@ -24,16 +24,15 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static com.sun.tools.doclint.Entity.part;
-
 public class HashAggPartitionImpl implements HashAggPartition {
   private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(HashAggregator.class);
 
   private final int partitionIndex;
   private final SpillSet spillSet;
-  private final VectorContainer outContainer;
   private final HashAggBatchHolderFactory batchHolderFactory;
   private final RecordBatch hashAggBatch;
+  private final HashAggSpillCycleProvider spillCycleProvider;
+  private final OutputBatchAllocator outputBatchAllocator;
 
   private final HashTable hashTable;
   private final ArrayList<HashAggTemplate.BatchHolder> batchHolders;
@@ -42,21 +41,24 @@ public class HashAggPartitionImpl implements HashAggPartition {
   private VectorSerializer.Writer writer;
   private int spilledBatchesCount;
   private int numInMemoryRecords;
+  private int numSpilledRecords;
   private String spillFile;
 
   public HashAggPartitionImpl(final int partitionIndex,
                               final SpillSet spillSet,
                               final ChainedHashTable baseHashTable,
                               final TypedFieldId[] groupByOutFieldIds,
-                              final VectorContainer outContainer,
                               final HashAggBatchHolderFactory batchHolderFactory,
                               final Map<String, Integer> keySizes,
-                              final RecordBatch hashAggBatch) {
+                              final RecordBatch hashAggBatch,
+                              final HashAggSpillCycleProvider spillCycleProvider,
+                              final OutputBatchAllocator outputBatchAllocator) {
     this.partitionIndex = partitionIndex;
     this.spillSet = Preconditions.checkNotNull(spillSet);
-    this.outContainer = Preconditions.checkNotNull(outContainer);
     this.batchHolderFactory = Preconditions.checkNotNull(batchHolderFactory);
     this.hashAggBatch = Preconditions.checkNotNull(hashAggBatch);
+    this.spillCycleProvider = Preconditions.checkNotNull(spillCycleProvider);
+    this.outputBatchAllocator = Preconditions.checkNotNull(outputBatchAllocator);
 
     try {
       hashTable = baseHashTable.createAndSetupHashTable(groupByOutFieldIds);
@@ -112,6 +114,11 @@ public class HashAggPartitionImpl implements HashAggPartition {
   @Override
   public long getNumInMemoryRecords() {
     return numInMemoryRecords;
+  }
+
+  @Override
+  public int getNumSpilledRecords() {
+    return numSpilledRecords;
   }
 
   @Override
@@ -171,21 +178,25 @@ public class HashAggPartitionImpl implements HashAggPartition {
     return putStatus;
   }
 
+  @Override
+  public String printStats() {
+    return null;
+  }
+
   public HashAggTemplate.BatchHolder getCurrentPendingBatch() {
     return batchHolders.get(outBatchIndex);
   }
 
   @Override
   public void outputCurrentPendingBatch(IndexPointer outStartIdxHolder,
-                                           IndexPointer outNumRecordsHolder,
-                                           VectorContainer outContainer) {
+                                        IndexPointer outNumRecordsHolder,
+                                        VectorContainer outContainer) {
     final HashAggTemplate.BatchHolder currentPendingBatch = getCurrentPendingBatch();
     currentPendingBatch.outputValues(outStartIdxHolder, outNumRecordsHolder);
 
     logger.debug(HashAggTemplate.HASH_AGG_DEBUG_1, "After output values: outStartIdx = {}, outNumRecords = {}", outStartIdxHolder.value, outNumRecordsHolder.value);
 
     hashTable.outputKeys(outBatchIndex, outContainer, outStartIdxHolder.value, outNumRecordsHolder.value, currentPendingBatch.getNumPendingOutput());
-
     outContainer.buildSchema(BatchSchema.SelectionVectorMode.NONE);
 
     for (VectorWrapper<?> v: hashAggBatch) {
@@ -205,32 +216,22 @@ public class HashAggPartitionImpl implements HashAggPartition {
 
     // If this is the first spill for this partition, create an output stream
     if (!isSpilled()) {
-      spillFile = spillSet.getNextSpillFile(cycleNum > 0 ? Integer.toString(cycleNum) : null);
+      spillFile = spillSet.getNextSpillFile(spillCycleProvider.getSpillCycle() > 0 ? Integer.toString(spillCycleProvider.getSpillCycle()) : null);
 
       try {
-        writers[part] = spillSet.writer(spillFiles[part]);
+        writer = spillSet.writer(spillFile);
       } catch (IOException ioe) {
         throw UserException.resourceError(ioe)
-          .message("Hash Aggregation failed to open spill file: " + spillFiles[part])
+          .message("Hash Aggregation failed to open spill file: " + spillFile)
           .build(logger);
       }
     }
 
-    for (int currOutBatchIndex = 0; currOutBatchIndex < currPartition.size(); currOutBatchIndex++ ) {
-
-      // get the number of records in the batch holder that are pending output
-      int numPendingOutput = currPartition.get(currOutBatchIndex).getNumPendingOutput();
-
-      rowsInPartition += numPendingOutput;  // for logging
-      rowsSpilled += numPendingOutput;
-
-      allocateOutgoing(numPendingOutput);
-
-      currPartition.get(currOutBatchIndex).outputValues(outStartIdxHolder, outNumRecordsHolder);
-      int numOutputRecords = outNumRecordsHolder.value;
-
-      this.htables[part].outputKeys(currOutBatchIndex, this.outContainer, outStartIdxHolder.value, outNumRecordsHolder.value, numPendingOutput);
-      WritableBatch batch = WritableBatch.getBatchNoHVWrap(numPendingOutput, outContainer, false);
+    while (hasPendingBatches()) {
+      final HashAggTemplate.BatchHolder currentPendingBatch = getCurrentPendingBatch();
+      final int numPendingOutput = currentPendingBatch.getNumPendingOutput();
+      final VectorContainer spillContianer = outputBatchAllocator.allocateBatch(numPendingOutput);
+      WritableBatch batch = WritableBatch.getBatchNoHVWrap(numPendingOutput, spillContianer, false);
 
       try {
         writer.write(batch, null);
@@ -240,15 +241,18 @@ public class HashAggPartitionImpl implements HashAggPartition {
           .build(logger);
       } finally {
         batch.clear();
+        spillContianer.zeroVectors();
       }
-      outContainer.zeroVectors();
+
       logger.trace("HASH AGG: Took {} us to spill {} records", writer.time(TimeUnit.MICROSECONDS), numPendingOutput);
     }
 
     logger.trace("HASH AGG: Spilled {} rows from {} batches of partition {}", numInMemoryRecords, batchHolders.size(), partitionIndex);
-
+    numSpilledRecords += numInMemoryRecords;
     spilledBatchesCount += batchHolders.size();
+
     numInMemoryRecords = 0;
+    outBatchIndex = 0;
     batchHolders.clear();
   }
 
