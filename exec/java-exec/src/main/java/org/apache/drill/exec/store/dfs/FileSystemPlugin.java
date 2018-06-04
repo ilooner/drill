@@ -54,6 +54,9 @@ import com.google.common.collect.Maps;
  * references to the FileSystem configuration and path management.
  */
 public class FileSystemPlugin extends AbstractStoragePlugin {
+  private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(FileSystemPlugin.class);
+
+  public static final String FS_DEFAULT_NAME = "fs.default.name";
 
   private final FileSystemSchemaFactory schemaFactory;
   private final FormatCreator formatCreator;
@@ -76,6 +79,16 @@ public class FileSystemPlugin extends AbstractStoragePlugin {
           fsConf.set(s, config.config.get(s));
         }
       }
+
+      logger.info("Original FileSystem default fs configuration {} {} {}",
+        fsConf.getTrimmed(FS_DEFAULT_NAME),
+        fsConf.getTrimmed(FileSystem.FS_DEFAULT_NAME_KEY),
+        config.connection);
+
+      if (logger.isInfoEnabled()) {
+        logger.info("Who made me? {}", new RuntimeException("Who made me?"));
+      }
+
       fsConf.set(FileSystem.FS_DEFAULT_NAME_KEY, config.connection);
       fsConf.set("fs.classpath.impl", ClassPathFileSystem.class.getName());
       fsConf.set("fs.drill-local.impl", LocalSyncableFileSystem.class.getName());

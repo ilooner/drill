@@ -64,6 +64,8 @@ import org.apache.hadoop.util.Progressable;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 
+import static org.apache.drill.exec.store.dfs.FileSystemPlugin.FS_DEFAULT_NAME;
+
 /**
  * DrillFileSystem is the wrapper around the actual FileSystem implementation.
  *
@@ -89,6 +91,16 @@ public class DrillFileSystem extends FileSystem implements OpenFileTracker {
 
   public DrillFileSystem(Configuration fsConf, OperatorStats operatorStats) throws IOException {
     this.underlyingFs = FileSystem.get(fsConf);
+
+    logger.info("Configuration for the DrillFileSystem {} {}, underlyingFs: {}",
+      fsConf.getTrimmed(FS_DEFAULT_NAME),
+      fsConf.getTrimmed(FS_DEFAULT_NAME_KEY),
+      this.underlyingFs.getUri());
+
+    if (logger.isInfoEnabled()) {
+      logger.info("Who made me? {}", new RuntimeException("Who made me?"));
+    }
+
     this.codecFactory = new CompressionCodecFactory(fsConf);
     this.operatorStats = operatorStats;
   }
