@@ -70,13 +70,14 @@ public class HashJoinMechanicalMemoryCalculator implements HashJoinMemoryCalcula
                            RecordBatch buildSideBatch,
                            RecordBatch probeSideBatch,
                            Set<String> joinColumns,
+                           boolean probeEmpty,
                            long memoryAvailable,
+                           long maxIncomingBatchSize,
                            int initialPartitions,
                            int recordsPerPartitionBatchBuild,
                            int recordsPerPartitionBatchProbe,
                            int maxBatchNumRecordsBuild,
                            int maxBatchNumRecordsProbe,
-                           int outputBatchNumRecords,
                            int outputBatchSize,
                            double loadFactor) {
       this.initialPartitions = initialPartitions;
@@ -135,8 +136,7 @@ public class HashJoinMechanicalMemoryCalculator implements HashJoinMemoryCalcula
     }
 
     @Override
-    public void initialize() {
-      // Do nothing
+    public void initialize(boolean probeEmty) {
     }
 
     @Override

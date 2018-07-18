@@ -76,8 +76,8 @@ public class TestPostBuildCalculationsImpl {
     final double fragmentationFactor = 2.0;
     final double safetyFactor = 1.5;
 
-    HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
-      new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
+    final HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.buildWithProbeData(
         290,
         15,
         60,
@@ -91,7 +91,7 @@ public class TestPostBuildCalculationsImpl {
         .75,
         false);
 
-    calc.initialize();
+    calc.initialize(false);
 
     long expected = 60 // maxProbeBatchSize
       + 160 // in memory partitions
@@ -123,7 +123,7 @@ public class TestPostBuildCalculationsImpl {
     final double safetyFactor = 1.5;
 
     HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
-      new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.buildWithProbeData(
         270,
         15,
         60,
@@ -137,7 +137,7 @@ public class TestPostBuildCalculationsImpl {
         .75,
         false);
 
-    calc.initialize();
+    calc.initialize(false);
 
     long expected = 60 // maxProbeBatchSize
       + 160 // in memory partitions
@@ -175,7 +175,7 @@ public class TestPostBuildCalculationsImpl {
     final double safetyFactor = 1.5;
 
     HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
-      new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.buildWithProbeData(
         180,
         15,
         60,
@@ -189,7 +189,7 @@ public class TestPostBuildCalculationsImpl {
         .75,
         true);
 
-    calc.initialize();
+    calc.initialize(false);
 
     long expected = 60 // maxProbeBatchSize
       + 2 * 5 * 3 // partition batches
@@ -219,7 +219,7 @@ public class TestPostBuildCalculationsImpl {
     final long hashJoinHelperSize = 10;
 
     HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
-      new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.buildWithProbeData(
         200,
         15,
         60,
@@ -233,7 +233,7 @@ public class TestPostBuildCalculationsImpl {
         .75,
         false);
 
-    calc.initialize();
+    calc.initialize(false);
 
     long expected = 60 // maxProbeBatchSize
       + 80 // in memory partition
@@ -273,7 +273,7 @@ public class TestPostBuildCalculationsImpl {
     final long hashJoinHelperSize = 10;
 
     HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
-      new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.buildWithProbeData(
         230,
         15,
         60,
@@ -287,7 +287,7 @@ public class TestPostBuildCalculationsImpl {
         .75,
         false);
 
-    calc.initialize();
+    calc.initialize(false);
 
     long expected = 60 // maxProbeBatchSize
       + 80 // in memory partition
@@ -321,7 +321,7 @@ public class TestPostBuildCalculationsImpl {
     final long hashJoinHelperSize = 10;
 
     HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
-      new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.buildWithProbeData(
         100,
         15,
         60,
@@ -335,7 +335,7 @@ public class TestPostBuildCalculationsImpl {
         .75,
         false);
 
-    calc.initialize();
+    calc.initialize(false);
     Assert.assertFalse(calc.shouldSpill());
     Assert.assertEquals(110, calc.getConsumedMemory());
     Assert.assertNotNull(calc.next());
@@ -366,7 +366,7 @@ public class TestPostBuildCalculationsImpl {
     final long hashJoinHelperSize = 10;
 
     HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
-      new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.buildWithProbeData(
         230,
         15,
         60,
@@ -380,7 +380,7 @@ public class TestPostBuildCalculationsImpl {
         .75,
         false);
 
-    calc.initialize();
+    calc.initialize(false);
   }
 
   private void addBatches(PartitionStatImpl partitionStat,

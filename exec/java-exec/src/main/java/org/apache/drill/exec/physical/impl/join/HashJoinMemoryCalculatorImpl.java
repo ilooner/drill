@@ -127,6 +127,17 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       ((double) desiredNumRecords));
   }
 
+  public static long getBatchSizeEstimate(final RecordBatch recordBatch) {
+    final RecordBatchSizer sizer = new RecordBatchSizer(recordBatch);
+    long size = 0L;
+
+    for (Map.Entry<String, RecordBatchSizer.ColumnSize> column : sizer.columns().entrySet()) {
+      size += PostBuildCalculationsImpl.computeValueVectorSize(recordBatch.getRecordCount(), column.getValue().getStdNetOrNetSizePerEntry());
+    }
+
+    return size;
+  }
+
   public static class NoopBuildSidePartitioningImpl implements BuildSidePartitioning {
     private int initialPartitions;
 
@@ -134,14 +145,16 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     public void initialize(boolean autoTune,
                            boolean reserveHash,
                            RecordBatch buildSideBatch,
-                           RecordBatch probeSideBatch, Set<String> joinColumns,
+                           RecordBatch probeSideBatch,
+                           Set<String> joinColumns,
+                           boolean probeEmpty,
                            long memoryAvailable,
+                           long maxIncomingBatchSize,
                            int initialPartitions,
                            int recordsPerPartitionBatchBuild,
                            int recordsPerPartitionBatchProbe,
                            int maxBatchNumRecordsBuild,
                            int maxBatchNumRecordsProbe,
-                           int outputBatchNumRecords,
                            int outputBatchSize,
                            double loadFactor) {
       this.initialPartitions = initialPartitions;
@@ -204,7 +217,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
    * <h1>Life Cycle</h1>
    * <p>
    *   <ul>
-   *     <li><b>Step 0:</b> Call {@link #initialize(boolean, boolean, RecordBatch, RecordBatch, Set, long, int, int, int, int, int, int, int, double)}.
+   *     <li><b>Step 0:</b> Call {@link #initialize(boolean, boolean, RecordBatch, RecordBatch, Set, boolean, long, long, int, int, int, int, int, int, double)}.
    *     This will initialize the StateCalculate with the additional information it needs.</li>
    *     <li><b>Step 1:</b> Call {@link #getNumPartitions()} to see the number of partitions that fit in memory.</li>
    *     <li><b>Step 2:</b> Call {@link #shouldSpill()} To determine if spilling needs to occurr.</li>
@@ -223,6 +236,9 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     private int maxBatchNumRecordsBuild;
     private int maxBatchNumRecordsProbe;
     private long memoryAvailable;
+    private boolean hasProbeData;
+    private boolean probeEmpty;
+    private long maxIncomingBatchSize;
     private long buildBatchSize;
     private long probeBatchSize;
     private int buildNumRecords;
@@ -248,6 +264,10 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
     private boolean firstInitialized;
     private boolean initialized;
+    /**
+     * Can be null during testing. Will never be null in production.
+     */
+    private RecordBatch probeBatch;
 
     public BuildSidePartitioningImpl(final HashTableSizeCalculator hashTableSizeCalculator,
                                      final HashJoinHelperSizeCalculator hashJoinHelperSizeCalculator,
@@ -265,32 +285,31 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
                            RecordBatch buildSideBatch,
                            RecordBatch probeSideBatch,
                            Set<String> joinColumns,
+                           boolean probeEmpty,
                            long memoryAvailable,
+                           long maxIncomingBatchSize,
                            int initialPartitions,
                            int recordsPerPartitionBatchBuild,
                            int recordsPerPartitionBatchProbe,
                            int maxBatchNumRecordsBuild,
                            int maxBatchNumRecordsProbe,
-                           int outputBatchNumRecords,
                            int outputBatchSize,
                            double loadFactor) {
       Preconditions.checkNotNull(buildSideBatch);
-      Preconditions.checkNotNull(probeSideBatch);
       Preconditions.checkNotNull(joinColumns);
 
+      this.probeBatch = Preconditions.checkNotNull(probeSideBatch);
+
       final RecordBatchSizer buildSizer = new RecordBatchSizer(buildSideBatch);
-      final RecordBatchSizer probeSizer = new RecordBatchSizer(probeSideBatch);
 
-      long buildBatchSize = getBatchSizeEstimate(buildSideBatch);
-      long probeBatchSize = getBatchSizeEstimate(probeSideBatch);
+      final boolean hasProbeData = !probeEmpty && probeSideBatch.getRecordCount() != 0;
 
-      int buildNumRecords = buildSizer.rowCount();
-      int probeNumRecords = probeSizer.rowCount();
+      final long buildBatchSize = getBatchSizeEstimate(buildSideBatch);
+      final long probeBatchSize = hasProbeData? getBatchSizeEstimate(probeSideBatch): 0;
 
-      final CaseInsensitiveMap<Long> buildValueSizes = getNotExcludedColumnSizes(
-        joinColumns, buildSizer);
-      final CaseInsensitiveMap<Long> probeValueSizes = getNotExcludedColumnSizes(
-        joinColumns, probeSizer);
+      final int buildNumRecords = buildSizer.rowCount();
+      final int probeNumRecords = hasProbeData? new RecordBatchSizer(probeSideBatch).rowCount(): 0;
+
       final CaseInsensitiveMap<Long> keySizes = CaseInsensitiveMap.newHashMap();
 
       for (String joinColumn: joinColumns) {
@@ -302,7 +321,10 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         reserveHash,
         keySizes,
         memoryAvailable,
+        maxIncomingBatchSize,
         initialPartitions,
+        probeEmpty,
+        hasProbeData,
         buildBatchSize,
         probeBatchSize,
         buildNumRecords,
@@ -316,43 +338,14 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     }
 
     @VisibleForTesting
-    protected static CaseInsensitiveMap<Long> getNotExcludedColumnSizes(
-        final Set<String> excludedColumns,
-        final RecordBatchSizer batchSizer) {
-      final CaseInsensitiveMap<Long> columnSizes = CaseInsensitiveMap.newHashMap();
-      final CaseInsensitiveMap<Boolean> excludedSet = CaseInsensitiveMap.newHashMap();
-
-      for (final String excludedColumn: excludedColumns) {
-        excludedSet.put(excludedColumn, true);
-      }
-
-      for (final Map.Entry<String, RecordBatchSizer.ColumnSize> entry: batchSizer.columns().entrySet()) {
-        final String columnName = entry.getKey();
-        final RecordBatchSizer.ColumnSize columnSize = entry.getValue();
-
-        columnSizes.put(columnName, (long) columnSize.getStdNetOrNetSizePerEntry());
-      }
-
-      return columnSizes;
-    }
-
-    public static long getBatchSizeEstimate(final RecordBatch recordBatch) {
-      final RecordBatchSizer sizer = new RecordBatchSizer(recordBatch);
-      long size = 0L;
-
-      for (Map.Entry<String, RecordBatchSizer.ColumnSize> column: sizer.columns().entrySet()) {
-        size += PostBuildCalculationsImpl.computeValueVectorSize(recordBatch.getRecordCount(), column.getValue().getStdNetOrNetSizePerEntry());
-      }
-
-      return size;
-    }
-
-    @VisibleForTesting
     protected void initialize(boolean autoTune,
                               boolean reserveHash,
                               CaseInsensitiveMap<Long> keySizes,
                               long memoryAvailable,
+                              long maxIncomingBatchSize,
                               int initialPartitions,
+                              boolean probeEmpty,
+                              boolean hasProbeData,
                               long buildBatchSize,
                               long probeBatchSize,
                               int buildNumRecords,
@@ -365,6 +358,9 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
                               double loadFactor) {
       Preconditions.checkState(!firstInitialized);
       Preconditions.checkArgument(initialPartitions >= 1);
+      // If we had probe data before there should still be probe data now.
+      // If we didn't have probe data before we could get some new data now.
+      Preconditions.checkState(hasProbeData && !probeEmpty || !hasProbeData);
       firstInitialized = true;
 
       this.loadFactor = loadFactor;
@@ -372,6 +368,9 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       this.reserveHash = reserveHash;
       this.keySizes = Preconditions.checkNotNull(keySizes);
       this.memoryAvailable = memoryAvailable;
+      this.probeEmpty = probeEmpty;
+      this.hasProbeData = hasProbeData;
+      this.maxIncomingBatchSize = maxIncomingBatchSize;
       this.buildBatchSize = buildBatchSize;
       this.probeBatchSize = probeBatchSize;
       this.buildNumRecords = buildNumRecords;
@@ -422,8 +421,22 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       // Adjust based on number of records
       maxBuildBatchSize = computeMaxBatchSizeNoHash(buildBatchSize, buildNumRecords,
         maxBatchNumRecordsBuild, fragmentationFactor, safetyFactor);
-      maxProbeBatchSize = computeMaxBatchSizeNoHash(probeBatchSize, probeNumRecords,
-        maxBatchNumRecordsProbe, fragmentationFactor, safetyFactor);
+
+      if (hasProbeData) {
+        // We have probe data and we can compute the max incoming size.
+        maxProbeBatchSize = computeMaxBatchSizeNoHash(probeBatchSize, probeNumRecords,
+          maxBatchNumRecordsProbe, fragmentationFactor, safetyFactor);
+      } else {
+        // We don't have probe data
+        if (probeEmpty) {
+          // We know the probe has no data, so we don't need to reserve any space for the incoming probe
+          maxProbeBatchSize = 0;
+        } else {
+          // The probe side may have data, so assume it is the max incoming batch size. This assumption
+          // can fail in some cases since the batch sizing project is incomplete.
+          maxProbeBatchSize = maxIncomingBatchSize;
+        }
+      }
 
       // Safety factor can be multiplied at the end since these batches are coming from exchange operators, so no excess value vector doubling
       partitionBuildBatchSize = computeMaxBatchSize(buildBatchSize,
@@ -433,18 +446,20 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         safetyFactor,
         reserveHash);
 
-      // Safety factor can be multiplied at the end since these batches are coming from exchange operators, so no excess value vector doubling
-      partitionProbeBatchSize = computeMaxBatchSize(
-        probeBatchSize,
-        probeNumRecords,
-        recordsPerPartitionBatchProbe,
-        fragmentationFactor,
-        safetyFactor,
-        reserveHash);
+      if (hasProbeData) {
+        // Safety factor can be multiplied at the end since these batches are coming from exchange operators, so no excess value vector doubling
+        partitionProbeBatchSize = computeMaxBatchSize(
+          probeBatchSize,
+          probeNumRecords,
+          recordsPerPartitionBatchProbe,
+          fragmentationFactor,
+          safetyFactor,
+          reserveHash);
+      }
 
       maxOutputBatchSize = (long) ((double)outputBatchSize * fragmentationFactor * safetyFactor);
 
-      long probeReservedMemory;
+      long probeReservedMemory = -1;
 
       for (partitions = initialPartitions;; partitions /= 2) {
         // The total amount of memory to reserve for incomplete batches across all partitions
@@ -455,13 +470,19 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         // they will have a well defined size.
         reservedMemory = incompletePartitionsBatchSizes + maxBuildBatchSize + maxProbeBatchSize;
 
-        probeReservedMemory = PostBuildCalculationsImpl.calculateReservedMemory(
-          partitions,
-          maxProbeBatchSize,
-          maxOutputBatchSize,
-          partitionProbeBatchSize);
+        if (hasProbeData) {
+          // If we have probe data, use it in our memory reservation calculations.
+          probeReservedMemory = PostBuildCalculationsImpl.calculateReservedMemory(
+            partitions,
+            maxProbeBatchSize,
+            maxOutputBatchSize,
+            partitionProbeBatchSize);
 
-        maxReservedMemory = Math.max(reservedMemory, probeReservedMemory);
+          maxReservedMemory = Math.max(reservedMemory, probeReservedMemory);
+        } else {
+          // If we do not have probe data, do our best effort at estimating the number of partitions without it.
+          maxReservedMemory = reservedMemory;
+        }
 
         if (!autoTune || maxReservedMemory <= memoryAvailable) {
           // Stop the tuning loop if we are not doing auto tuning, or if we are living within our memory limit
@@ -500,7 +521,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         String phase = "Probe phase: ";
 
         if (reservedMemory > memoryAvailable) {
-          if (probeReservedMemory > memoryAvailable) {
+          if (hasProbeData && probeReservedMemory > memoryAvailable) {
             phase = "Build and Probe phases: ";
           } else {
             phase = "Build phase: ";
@@ -531,18 +552,39 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     public PostBuildCalculations next() {
       Preconditions.checkState(initialized);
 
-      return new PostBuildCalculationsImpl(memoryAvailable,
-        partitionProbeBatchSize,
-        maxProbeBatchSize,
-        maxOutputBatchSize,
-        partitionStatsSet,
-        keySizes,
-        hashTableSizeCalculator,
-        hashJoinHelperSizeCalculator,
-        fragmentationFactor,
-        safetyFactor,
-        loadFactor,
-        reserveHash);
+      if (hasProbeData) {
+        // If we have probe data, give it to the post build calculator.
+        return PostBuildCalculationsImpl.buildWithProbeData(
+          memoryAvailable,
+          partitionProbeBatchSize,
+          maxProbeBatchSize,
+          maxOutputBatchSize,
+          partitionStatsSet,
+          keySizes,
+          hashTableSizeCalculator,
+          hashJoinHelperSizeCalculator,
+          fragmentationFactor,
+          safetyFactor,
+          loadFactor,
+          reserveHash);
+      } else {
+        // If we don't have probe data, give the necessary data needed to compute probe side batches and
+        // incoming probe batch sizes.
+        return PostBuildCalculationsImpl.buildWithoutProbeData(
+          probeBatch,
+          memoryAvailable,
+          maxOutputBatchSize,
+          maxBatchNumRecordsProbe,
+          recordsPerPartitionBatchProbe,
+          partitionStatsSet,
+          keySizes,
+          hashTableSizeCalculator,
+          hashJoinHelperSizeCalculator,
+          fragmentationFactor,
+          safetyFactor,
+          loadFactor,
+          reserveHash);
+      }
     }
 
     @Override
@@ -573,8 +615,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
   public static class NoopPostBuildCalculationsImpl implements PostBuildCalculations {
     @Override
-    public void initialize() {
-
+    public void initialize(boolean hasProbeData) {
     }
 
     @Override
@@ -610,7 +651,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
    * <h1>Lifecycle</h1>
    * <p>
    *   <ul>
-   *     <li><b>Step 1:</b> Call {@link #initialize()}. This
+   *     <li><b>Step 1:</b> Call {@link #initialize(boolean)}. This
    *     gives the {@link HashJoinStateCalculator} additional information it needs to compute memory requirements.</li>
    *     <li><b>Step 2:</b> Call {@link #shouldSpill()}. This tells
    *     you which build side partitions need to be spilled in order to make room for probing.</li>
@@ -620,10 +661,14 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
    * </p>
    */
   public static class PostBuildCalculationsImpl implements PostBuildCalculations {
+    /**
+     * Can be null during testing. Will never be null in production.
+     */
+    private final RecordBatch probeBatch;
     private final long memoryAvailable;
-    private final long partitionProbeBatchSize;
-    private final long maxProbeBatchSize;
     private final long maxOutputBatchSize;
+    private final int maxBatchNumRecordsProbe;
+    private final int recordsPerPartitionBatchProbe;
     private final PartitionStatSet buildPartitionStatSet;
     private final Map<String, Long> keySizes;
     private final HashTableSizeCalculator hashTableSizeCalculator;
@@ -632,15 +677,21 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     private final double safetyFactor;
     private final double loadFactor;
     private final boolean reserveHash;
-    // private final long maxOutputBatchSize;
+    private final boolean hasProbeData;
 
+    private long partitionProbeBatchSize;
+    private long maxProbeBatchSize;
     private boolean initialized;
     private long consumedMemory;
+    private boolean probeEmpty;
 
-    public PostBuildCalculationsImpl(final long memoryAvailable,
+    private PostBuildCalculationsImpl(final RecordBatch probeBatch,
+                                     final long memoryAvailable,
+                                     final long maxOutputBatchSize,
+                                     final int maxBatchNumRecordsProbe,
+                                     final int recordsPerPartitionBatchProbe,
                                      final long partitionProbeBatchSize,
                                      final long maxProbeBatchSize,
-                                     final long maxOutputBatchSize,
                                      final PartitionStatSet buildPartitionStatSet,
                                      final Map<String, Long> keySizes,
                                      final HashTableSizeCalculator hashTableSizeCalculator,
@@ -648,10 +699,10 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
                                      final double fragmentationFactor,
                                      final double safetyFactor,
                                      final double loadFactor,
-                                     final boolean reserveHash) {
+                                     final boolean reserveHash,
+                                     final boolean hasProbeData) {
+      this.probeBatch = probeBatch;
       this.memoryAvailable = memoryAvailable;
-      this.partitionProbeBatchSize = partitionProbeBatchSize;
-      this.maxProbeBatchSize = maxProbeBatchSize;
       this.maxOutputBatchSize = maxOutputBatchSize;
       this.buildPartitionStatSet = Preconditions.checkNotNull(buildPartitionStatSet);
       this.keySizes = Preconditions.checkNotNull(keySizes);
@@ -661,13 +712,109 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       this.safetyFactor = safetyFactor;
       this.loadFactor = loadFactor;
       this.reserveHash = reserveHash;
+      this.maxBatchNumRecordsProbe = maxBatchNumRecordsProbe;
+      this.recordsPerPartitionBatchProbe = recordsPerPartitionBatchProbe;
+      this.partitionProbeBatchSize = partitionProbeBatchSize;
+      this.maxProbeBatchSize = maxProbeBatchSize;
+      this.hasProbeData = hasProbeData;
     }
 
-    // TODO take an incoming Probe RecordBatch
+    public static PostBuildCalculationsImpl buildWithoutProbeData(final RecordBatch probeBatch,
+                                                                  final long memoryAvailable,
+                                                                  final long maxOutputBatchSize,
+                                                                  final int maxBatchNumRecordsProbe,
+                                                                  final int recordsPerPartitionBatchProbe,
+                                                                  final PartitionStatSet buildPartitionStatSet,
+                                                                  final Map<String, Long> keySizes,
+                                                                  final HashTableSizeCalculator hashTableSizeCalculator,
+                                                                  final HashJoinHelperSizeCalculator hashJoinHelperSizeCalculator,
+                                                                  final double fragmentationFactor,
+                                                                  final double safetyFactor,
+                                                                  final double loadFactor,
+                                                                  final boolean reserveHash) {
+      return new PostBuildCalculationsImpl(probeBatch,
+        memoryAvailable,
+        maxOutputBatchSize,
+        maxBatchNumRecordsProbe,
+        recordsPerPartitionBatchProbe,
+        0,
+        0,
+        buildPartitionStatSet,
+        keySizes,
+        hashTableSizeCalculator,
+        hashJoinHelperSizeCalculator,
+        fragmentationFactor,
+        safetyFactor,
+        loadFactor,
+        reserveHash,
+        false);
+    }
+
+    public static PostBuildCalculationsImpl buildWithProbeData(final long memoryAvailable,
+                                                               final long partitionProbeBatchSize,
+                                                               final long maxProbeBatchSize,
+                                                               final long maxOutputBatchSize,
+                                                               final PartitionStatSet buildPartitionStatSet,
+                                                               final Map<String, Long> keySizes,
+                                                               final HashTableSizeCalculator hashTableSizeCalculator,
+                                                               final HashJoinHelperSizeCalculator hashJoinHelperSizeCalculator,
+                                                               final double fragmentationFactor,
+                                                               final double safetyFactor,
+                                                               final double loadFactor,
+                                                               final boolean reserveHash) {
+      return new PostBuildCalculationsImpl(null,
+        memoryAvailable,
+        maxOutputBatchSize,
+        0,
+        0,
+        partitionProbeBatchSize,
+        maxProbeBatchSize,
+        buildPartitionStatSet,
+        keySizes,
+        hashTableSizeCalculator,
+        hashJoinHelperSizeCalculator,
+        fragmentationFactor,
+        safetyFactor,
+        loadFactor,
+        reserveHash,
+        true);
+    }
+
     @Override
-    public void initialize() {
+    public void initialize(boolean probeEmpty) {
       Preconditions.checkState(!initialized);
+      // If we had probe data before there should still be probe data now.
+      // If we didn't have probe data before we could get some new data now.
+      Preconditions.checkState(hasProbeData && !probeEmpty || !hasProbeData);
       initialized = true;
+      this.probeEmpty = probeEmpty;
+
+      if (hasProbeData) {
+        // We already have our data, we don't need to do anything.
+        return;
+      }
+
+      if (probeEmpty) {
+        // We know there is no probe side data, so we don't need to calculate anything.
+        return;
+      }
+
+      // We need to compute sizes of probe side data.
+
+      final long probeBatchSize = getBatchSizeEstimate(probeBatch);
+      final int probeNumRecords = new RecordBatchSizer(probeBatch).rowCount();
+
+      // We have probe data and we can compute the max incoming size.
+      maxProbeBatchSize = computeMaxBatchSizeNoHash(probeBatchSize,
+        probeNumRecords, maxBatchNumRecordsProbe, fragmentationFactor, safetyFactor);
+
+      partitionProbeBatchSize = computeMaxBatchSize(
+        probeBatchSize,
+        probeNumRecords,
+        recordsPerPartitionBatchProbe,
+        fragmentationFactor,
+        safetyFactor,
+        reserveHash);
     }
 
     public long getConsumedMemory() {
@@ -709,6 +856,11 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     @Override
     public boolean shouldSpill() {
       Preconditions.checkState(initialized);
+
+      if (probeEmpty) {
+        // If the probe is empty, we should not trigger any spills.
+        return false;
+      }
 
       long reservedMemory = calculateReservedMemory(
         buildPartitionStatSet.getNumSpilledPartitions(),

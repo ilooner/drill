@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 import com.google.common.collect.Lists;
@@ -115,6 +114,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
   // Fields used for partitioning
 
+  private long maxIncomingBatchSize;
   /**
    * The number of {@link HashPartition}s. This is configured via a system option and set in {@link #partitionNumTuning(int, HashJoinMemoryCalculator.BuildSidePartitioning)}.
    */
@@ -151,9 +151,13 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
   private RecordBatch probeBatch;
 
   /**
-   * Flag indicating whether or not the first data holding batch needs to be fetched.
+   * Flag indicating whether or not the first data holding build batch needs to be fetched.
    */
-  private boolean prefetched;
+  private boolean prefetchedBuild;
+  /**
+   * Flag indicating whether or not the first data holding probe batch needs to be fetched.
+   */
+  private boolean prefetchedProbe;
 
   // For handling spilling
   private SpillSet spillSet;
@@ -249,13 +253,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
     }
   }
 
-  @Override
-  protected boolean prefetchFirstBatchFromBothSides() {
-    if (leftUpstream != IterOutcome.NONE) {
-      // We can only get data if there is data available
-      leftUpstream = sniffNonEmptyBatch(leftUpstream, LEFT_INDEX, left);
-    }
-
+  private void prefetchFirstBuildBatch() {
     if (rightUpstream != IterOutcome.NONE) {
       // We can only get data if there is data available
       rightUpstream = sniffNonEmptyBatch(rightUpstream, RIGHT_INDEX, right);
@@ -263,18 +261,44 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
     buildSideIsEmpty = rightUpstream == IterOutcome.NONE;
 
-    if (verifyOutcomeToSetBatchState(leftUpstream, rightUpstream)) {
+    if (rightUpstream == IterOutcome.OUT_OF_MEMORY) {
+      // We reached a termination state
+      state = BatchState.OUT_OF_MEMORY;
+    } else if (rightUpstream == IterOutcome.STOP) {
+      state = BatchState.STOP;
+    } else {
       // For build side, use aggregate i.e. average row width across batches
-      batchMemoryManager.update(LEFT_INDEX, 0);
       batchMemoryManager.update(RIGHT_INDEX, 0, true);
-
-      logger.debug("BATCH_STATS, incoming left: {}", batchMemoryManager.getRecordBatchSizer(LEFT_INDEX));
       logger.debug("BATCH_STATS, incoming right: {}", batchMemoryManager.getRecordBatchSizer(RIGHT_INDEX));
 
       // Got our first batche(s)
       state = BatchState.FIRST;
+    }
+  }
+
+  /**
+   *
+   * @return True terminate. False continue.
+   */
+  private boolean prefetchFirstProbeBatch() {
+    if (leftUpstream != IterOutcome.NONE) {
+      // We can only get data if there is data available
+      leftUpstream = sniffNonEmptyBatch(leftUpstream, LEFT_INDEX, left);
+    }
+
+    if (rightUpstream == IterOutcome.OUT_OF_MEMORY) {
+      // We reached a termination state
+      state = BatchState.OUT_OF_MEMORY;
+      return true;
+    } else if (rightUpstream == IterOutcome.STOP) {
+      state = BatchState.STOP;
       return true;
     } else {
+      batchMemoryManager.update(LEFT_INDEX, 0);
+      logger.debug("BATCH_STATS, incoming left: {}", batchMemoryManager.getRecordBatchSizer(LEFT_INDEX));
+
+      // Got our first batche(s)
+      state = BatchState.FIRST;
       return false;
     }
   }
@@ -293,7 +317,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
     switch (leftUpstream) {
       case OK_NEW_SCHEMA:
-        probeSchema = probeBatch.getSchema();
+        probeSchema = left.getSchema();
       case NONE:
         isValidLeft = true;
         break;
@@ -382,16 +406,14 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
   @Override
   public IterOutcome innerNext() {
-    if (!prefetched) {
+    if (!prefetchedBuild) {
       // If we didn't retrieve our first data hold batch, we need to do it now.
-      prefetched = true;
-      prefetchFirstBatchFromBothSides();
+      prefetchedBuild = true;
+      prefetchFirstBuildBatch();
 
       // Handle emitting the correct outcome for termination conditions
-      // Use the state set by prefetchFirstBatchFromBothSides to emit the correct termination outcome.
+      // Use the state set by prefetchFirstBuildBatch to emit the correct termination outcome.
       switch (state) {
-        case DONE:
-          return IterOutcome.NONE;
         case STOP:
           return IterOutcome.STOP;
         case OUT_OF_MEMORY:
@@ -414,15 +436,58 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       if (state == BatchState.FIRST) {
         // Build the hash table, using the build side record batches.
         executeBuildPhase();
+
+        // Handle emitting the correct outcome for termination conditions
+        // Use the state set by prefetchFirstProbeBatch to emit the correct termination outcome.
+        switch (state) {
+          case STOP:
+            return IterOutcome.STOP;
+          case OUT_OF_MEMORY:
+            return IterOutcome.OUT_OF_MEMORY;
+          default:
+            // No termination condition so continue processing.
+        }
+
         // Update the hash table related stats for the operator
         updateStats();
-        // Initialize various settings for the probe side
-        hashJoinProbe.setupHashJoinProbe(probeBatch, this, joinType, leftUpstream, partitions, cycleNum, container, spilledInners, buildSideIsEmpty, numPartitions, rightHVColPosition);
       }
 
       // Try to probe and project, or recursively handle a spilled partition
       if ( ! buildSideIsEmpty ||  // If there are build-side rows
            joinType != JoinRelType.INNER) {  // or if this is a left/full outer join
+
+        if (!prefetchedProbe) {
+          prefetchedProbe = true;
+          // In this case the probe side was not prefetched. So we need to do it here.
+          prefetchFirstProbeBatch();
+
+          // Handle emitting the correct outcome for termination conditions
+          // Use the state set by prefetchFirstProbeBatch to emit the correct termination outcome.
+          switch (state) {
+            case STOP:
+              return IterOutcome.STOP;
+            case OUT_OF_MEMORY:
+              return IterOutcome.OUT_OF_MEMORY;
+            default:
+              // No termination condition so continue processing.
+          }
+        }
+
+        if (state == BatchState.FIRST) {
+          // Initialize various settings for the probe side
+          hashJoinProbe.setupHashJoinProbe(
+            probeBatch,
+            this,
+            joinType,
+            leftUpstream,
+            partitions,
+            cycleNum,
+            container,
+            spilledInners,
+            buildSideIsEmpty,
+            numPartitions,
+            rightHVColPosition);
+        }
 
         // Allocate the memory for the vectors in the output container
         batchMemoryManager.allocateVectors(container);
@@ -645,13 +710,14 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         buildBatch,
         probeBatch,
         buildJoinColumns,
+        leftUpstream == IterOutcome.NONE, // probeEmpty
         allocator.getLimit(),
+        maxIncomingBatchSize,
         numPartitions,
         RECORDS_PER_BATCH,
         RECORDS_PER_BATCH,
         maxBatchSize,
         maxBatchSize,
-        batchMemoryManager.getOutputRowCount(),
         batchMemoryManager.getOutputBatchSize(),
         HashTable.DEFAULT_LOAD_FACTOR);
 
@@ -693,7 +759,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
    * @throws SchemaChangeException
    */
   public void executeBuildPhase() throws SchemaChangeException {
-    if (rightUpstream == IterOutcome.NONE) {
+    if (buildSideIsEmpty) {
       // empty right
       return;
     }
@@ -717,13 +783,14 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
         buildBatch,
         probeBatch,
         buildJoinColumns,
+        leftUpstream == IterOutcome.NONE, // probeEmpty
         allocator.getLimit(),
+        maxIncomingBatchSize,
         numPartitions,
         RECORDS_PER_BATCH,
         RECORDS_PER_BATCH,
         maxBatchSize,
         maxBatchSize,
-        batchMemoryManager.getOutputRowCount(),
         batchMemoryManager.getOutputBatchSize(),
         HashTable.DEFAULT_LOAD_FACTOR);
 
@@ -802,8 +869,18 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       }
     }
 
+    if (!prefetchedProbe) {
+      // We need probe side data in order to make sure there is enough memory for the probe.
+      prefetchedProbe = true;
+
+      if (prefetchFirstProbeBatch()) {
+        // We reached a termination condition while prefetching the probe.
+        return;
+      }
+    }
+
     HashJoinMemoryCalculator.PostBuildCalculations postBuildCalc = buildCalc.next();
-    postBuildCalc.initialize();
+    postBuildCalc.initialize(leftUpstream == IterOutcome.NONE); // probeEmpty
 
     //
     //  Traverse all the in-memory partitions' incoming batches, and build their hash tables
@@ -939,6 +1016,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
     this.allocator = oContext.getAllocator();
 
+    maxIncomingBatchSize = context.getOptions().getLong(ExecConstants.OUTPUT_BATCH_SIZE);
     numPartitions = (int)context.getOptions().getOption(ExecConstants.HASHJOIN_NUM_PARTITIONS_VALIDATOR);
     if ( numPartitions == 1 ) { //
       disableSpilling("Spilling is disabled due to configuration setting of num_partitions to 1");
