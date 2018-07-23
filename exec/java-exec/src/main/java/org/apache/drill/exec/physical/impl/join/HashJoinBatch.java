@@ -286,11 +286,11 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       leftUpstream = sniffNonEmptyBatch(leftUpstream, LEFT_INDEX, left);
     }
 
-    if (rightUpstream == IterOutcome.OUT_OF_MEMORY) {
+    if (leftUpstream == IterOutcome.OUT_OF_MEMORY) {
       // We reached a termination state
       state = BatchState.OUT_OF_MEMORY;
       return true;
-    } else if (rightUpstream == IterOutcome.STOP) {
+    } else if (leftUpstream == IterOutcome.STOP) {
       state = BatchState.STOP;
       return true;
     } else {

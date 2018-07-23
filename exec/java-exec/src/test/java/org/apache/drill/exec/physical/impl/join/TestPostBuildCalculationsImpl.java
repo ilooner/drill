@@ -57,6 +57,87 @@ public class TestPostBuildCalculationsImpl {
     Assert.assertEquals(expected, actual);
   }
 
+  @Test(expected = IllegalStateException.class)
+  public void testHasProbeDataButProbeEmpty() {
+    final Map<String, Long> keySizes = org.apache.drill.common.map.CaseInsensitiveMap.newHashMap();
+
+    final PartitionStatImpl partition1 = new PartitionStatImpl();
+    final PartitionStatImpl partition2 = new PartitionStatImpl();
+    final HashJoinMemoryCalculator.PartitionStatSet buildPartitionStatSet =
+      new HashJoinMemoryCalculator.PartitionStatSet(partition1, partition2);
+
+    final int recordsPerPartitionBatchBuild = 10;
+
+    addBatches(partition1, recordsPerPartitionBatchBuild,
+      10, 4);
+    addBatches(partition2, recordsPerPartitionBatchBuild,
+      10, 4);
+
+    final double fragmentationFactor = 2.0;
+    final double safetyFactor = 1.5;
+
+    final HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.buildWithProbeData(
+        290,
+        15,
+        60,
+        20,
+        buildPartitionStatSet,
+        keySizes,
+        new MockHashTableSizeCalculator(10),
+        new MockHashJoinHelperSizeCalculator(10),
+        fragmentationFactor,
+        safetyFactor,
+        .75,
+        false);
+
+    calc.initialize(true);
+  }
+
+  @Test
+  public void testProbeEmpty() {
+    final Map<String, Long> keySizes = org.apache.drill.common.map.CaseInsensitiveMap.newHashMap();
+
+    final PartitionStatImpl partition1 = new PartitionStatImpl();
+    final PartitionStatImpl partition2 = new PartitionStatImpl();
+    final HashJoinMemoryCalculator.PartitionStatSet buildPartitionStatSet =
+      new HashJoinMemoryCalculator.PartitionStatSet(partition1, partition2);
+
+    final int recordsPerPartitionBatchBuild = 10;
+
+    addBatches(partition1, recordsPerPartitionBatchBuild,
+      10, 4);
+    addBatches(partition2, recordsPerPartitionBatchBuild,
+      10, 4);
+
+    final double fragmentationFactor = 2.0;
+    final double safetyFactor = 1.5;
+
+    final HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
+      HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl.buildWithoutProbeData(null,
+        50,
+        40,
+        10000,
+        1000,
+        buildPartitionStatSet,
+        keySizes,
+        new MockHashTableSizeCalculator(10),
+        new MockHashJoinHelperSizeCalculator(10),
+        fragmentationFactor,
+        safetyFactor,
+        .75,
+        true);
+
+    calc.initialize(true);
+
+    Assert.assertFalse(calc.shouldSpill());
+    Assert.assertFalse(calc.shouldSpill());
+  }
+
+  @Test
+  public void testHasNoProbeData() {
+  }
+
   @Test
   public void testProbingAndPartitioningBuildAllInMemoryNoSpill() {
     final Map<String, Long> keySizes = org.apache.drill.common.map.CaseInsensitiveMap.newHashMap();
