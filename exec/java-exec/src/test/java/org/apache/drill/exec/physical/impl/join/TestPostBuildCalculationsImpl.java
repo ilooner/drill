@@ -24,7 +24,6 @@ import org.junit.Test;
 import java.util.Map;
 
 public class TestPostBuildCalculationsImpl {
-
   @Test(expected = IllegalStateException.class)
   public void testHasProbeDataButProbeEmpty() {
     final Map<String, Long> keySizes = org.apache.drill.common.map.CaseInsensitiveMap.newHashMap();
@@ -51,7 +50,7 @@ public class TestPostBuildCalculationsImpl {
 
     final HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
       new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
-        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize),
+        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize, true),
         290, // memoryAvailable
         20, // maxOutputBatchSize
         maxBatchNumRecordsProbe,
@@ -115,7 +114,55 @@ public class TestPostBuildCalculationsImpl {
   }
 
   @Test
-  public void testHasNoProbeData() {
+  public void testHasNoProbeDataButProbeNonEmpty() {
+    final Map<String, Long> keySizes = org.apache.drill.common.map.CaseInsensitiveMap.newHashMap();
+
+    final PartitionStatImpl partition1 = new PartitionStatImpl();
+    final PartitionStatImpl partition2 = new PartitionStatImpl();
+    final HashJoinMemoryCalculator.PartitionStatSet buildPartitionStatSet =
+      new HashJoinMemoryCalculator.PartitionStatSet(partition1, partition2);
+
+    final int recordsPerPartitionBatchBuild = 10;
+
+    addBatches(partition1, recordsPerPartitionBatchBuild,
+      10, 4);
+    addBatches(partition2, recordsPerPartitionBatchBuild,
+      10, 4);
+
+    final double fragmentationFactor = 2.0;
+    final double safetyFactor = 1.5;
+
+    final int maxBatchNumRecordsProbe = 3;
+    final int recordsPerPartitionBatchProbe = 5;
+    final long partitionProbeBatchSize = 15;
+    final long maxProbeBatchSize = 60;
+
+    final HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
+      new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
+        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize, false),
+        290,
+        20,
+        maxBatchNumRecordsProbe,
+        recordsPerPartitionBatchProbe,
+        buildPartitionStatSet,
+        keySizes,
+        new MockHashTableSizeCalculator(10),
+        new MockHashJoinHelperSizeCalculator(10),
+        fragmentationFactor,
+        safetyFactor,
+        .75,
+        false);
+
+    calc.initialize(false);
+
+    long expected = 60 // maxProbeBatchSize
+      + 160 // in memory partitions
+      + 20 // max output batch size
+      + 2 * 10 // Hash Table
+      + 2 * 10; // Hash join helper
+    Assert.assertFalse(calc.shouldSpill());
+    Assert.assertEquals(expected, calc.getConsumedMemory());
+    Assert.assertNull(calc.next());
   }
 
   @Test
@@ -144,7 +191,7 @@ public class TestPostBuildCalculationsImpl {
 
     final HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
       new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
-        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize),
+        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize, true),
         290,
         20,
         maxBatchNumRecordsProbe,
@@ -196,7 +243,7 @@ public class TestPostBuildCalculationsImpl {
 
     HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
       new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
-        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize),
+        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize, true),
         270,
         20,
          maxBatchNumRecordsProbe,
@@ -254,7 +301,7 @@ public class TestPostBuildCalculationsImpl {
 
     HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
       new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
-        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize),
+        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize, true),
         180,
         20,
         maxBatchNumRecordsProbe,
@@ -304,7 +351,7 @@ public class TestPostBuildCalculationsImpl {
 
     HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
       new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
-        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize),
+        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize, true),
         200,
         20,
         maxBatchNumRecordsProbe,
@@ -364,7 +411,7 @@ public class TestPostBuildCalculationsImpl {
 
     HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
       new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
-        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize),
+        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize, true),
         230,
         20,
         maxBatchNumRecordsProbe,
@@ -418,7 +465,7 @@ public class TestPostBuildCalculationsImpl {
 
     HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
       new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
-        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize),
+        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize, true),
         100,
         20,
         maxBatchNumRecordsProbe,
@@ -469,7 +516,7 @@ public class TestPostBuildCalculationsImpl {
 
     HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl calc =
       new HashJoinMemoryCalculatorImpl.PostBuildCalculationsImpl(
-        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize),
+        new ConditionalMockBatchSizePredictor(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe, maxProbeBatchSize, partitionProbeBatchSize, true),
         230,
         20,
         maxBatchNumRecordsProbe,
@@ -540,26 +587,30 @@ public class TestPostBuildCalculationsImpl {
     private final int recordsPerPartitionBatchProbe;
     private final long maxProbeBatchSize;
     private final long partitionProbeBatchSize;
-    private final boolean hasData;
 
+    private boolean hasData;
+    private boolean updateable;
 
     public ConditionalMockBatchSizePredictor() {
-      this.maxBatchNumRecordsProbe = 0;
-      this.recordsPerPartitionBatchProbe = 0;
-      this.maxProbeBatchSize = 0;
-      this.partitionProbeBatchSize = 0;
-      this.hasData = false;
+      maxBatchNumRecordsProbe = 0;
+      recordsPerPartitionBatchProbe = 0;
+      maxProbeBatchSize = 0;
+      partitionProbeBatchSize = 0;
+      hasData = false;
+      updateable = true;
     }
 
     public ConditionalMockBatchSizePredictor(final int maxBatchNumRecordsProbe,
                                              final int recordsPerPartitionBatchProbe,
                                              final long maxProbeBatchSize,
-                                             final long partitionProbeBatchSize) {
+                                             final long partitionProbeBatchSize,
+                                             final boolean hasData) {
       this.maxBatchNumRecordsProbe = maxBatchNumRecordsProbe;
       this.recordsPerPartitionBatchProbe = recordsPerPartitionBatchProbe;
       this.maxProbeBatchSize = maxProbeBatchSize;
       this.partitionProbeBatchSize = partitionProbeBatchSize;
-      this.hasData = true;
+      this.hasData = hasData;
+      updateable = true;
     }
 
     @Override
@@ -579,6 +630,9 @@ public class TestPostBuildCalculationsImpl {
 
     @Override
     public void updateStats() {
+      Preconditions.checkState(updateable);
+      updateable = false;
+      hasData = true;
     }
 
     @Override
