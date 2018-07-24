@@ -63,6 +63,7 @@ import org.apache.drill.exec.record.MaterializedField;
 import org.apache.drill.exec.record.RecordBatch;
 import org.apache.drill.exec.record.RecordBatchSizer;
 import org.apache.drill.exec.record.VectorWrapper;
+import org.apache.drill.exec.server.options.DrillConfigIterator;
 import org.apache.drill.exec.vector.IntVector;
 import org.apache.drill.exec.vector.ValueVector;
 import org.apache.drill.exec.vector.complex.AbstractContainerVector;
@@ -126,7 +127,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
    * The master class used to generate {@link HashTable}s.
    */
   private ChainedHashTable baseHashTable;
-  private boolean buildSideIsEmpty = true;
+  private boolean buildSideIsEmpty = false;
+  private boolean probeSideIsEmpty = false;
   private boolean canSpill = true;
   private boolean wasKilled; // a kill was received, may need to clean spilled partns
 
@@ -285,6 +287,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       // We can only get data if there is data available
       leftUpstream = sniffNonEmptyBatch(leftUpstream, LEFT_INDEX, left);
     }
+
+    probeSideIsEmpty = leftUpstream == IterOutcome.NONE;
 
     if (leftUpstream == IterOutcome.OUT_OF_MEMORY) {
       // We reached a termination state
@@ -473,55 +477,58 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           }
         }
 
-        if (state == BatchState.FIRST) {
-          // Initialize various settings for the probe side
-          hashJoinProbe.setupHashJoinProbe(
-            probeBatch,
-            this,
-            joinType,
-            leftUpstream,
-            partitions,
-            cycleNum,
-            container,
-            spilledInners,
-            buildSideIsEmpty,
-            numPartitions,
-            rightHVColPosition);
-        }
+        if (!buildSideIsEmpty || !probeSideIsEmpty) {
+          // Only allocate outgoing vectors and execute probing logic if there is data
 
-        try {
-          // Allocate the memory for the vectors in the output container
-          batchMemoryManager.allocateVectors(container);
-        } catch (NullPointerException e) {
-          final String message = "right up " + rightUpstream + " left up " + leftUpstream + " prefetch build " + prefetchedBuild + " probe " + prefetchedProbe;
-          throw UserException.executionError(new RuntimeException(message, e)).message(message).build();
-        }
-
-        hashJoinProbe.setTargetOutputCount(batchMemoryManager.getOutputRowCount());
-
-        outputRecords = hashJoinProbe.probeAndProject();
-
-        for (final VectorWrapper<?> v : container) {
-          v.getValueVector().getMutator().setValueCount(outputRecords);
-        }
-        container.setRecordCount(outputRecords);
-
-        batchMemoryManager.updateOutgoingStats(outputRecords);
-        if (logger.isDebugEnabled()) {
-          logger.debug("BATCH_STATS, outgoing: {}", new RecordBatchSizer(this));
-        }
-
-        /* We are here because of one the following
-         * 1. Completed processing of all the records and we are done
-         * 2. We've filled up the outgoing batch to the maximum and we need to return upstream
-         * Either case build the output container's schema and return
-         */
-        if (outputRecords > 0 || state == BatchState.FIRST) {
           if (state == BatchState.FIRST) {
-            state = BatchState.NOT_FIRST;
+            // Initialize various settings for the probe side
+            hashJoinProbe.setupHashJoinProbe(probeBatch,
+              this,
+              joinType,
+              leftUpstream,
+              partitions,
+              cycleNum,
+              container,
+              spilledInners,
+              buildSideIsEmpty,
+              numPartitions,
+              rightHVColPosition);
           }
 
-          return IterOutcome.OK;
+          try {
+            // Allocate the memory for the vectors in the output container
+            batchMemoryManager.allocateVectors(container);
+          } catch (NullPointerException e) {
+            final String message = "right up " + rightUpstream + " left up " + leftUpstream + " prefetch build " + prefetchedBuild + " probe " + prefetchedProbe;
+            throw UserException.executionError(new RuntimeException(message, e)).message(message).build();
+          }
+
+          hashJoinProbe.setTargetOutputCount(batchMemoryManager.getOutputRowCount());
+
+          outputRecords = hashJoinProbe.probeAndProject();
+
+          for (final VectorWrapper<?> v : container) {
+            v.getValueVector().getMutator().setValueCount(outputRecords);
+          }
+          container.setRecordCount(outputRecords);
+
+          batchMemoryManager.updateOutgoingStats(outputRecords);
+          if (logger.isDebugEnabled()) {
+            logger.debug("BATCH_STATS, outgoing: {}", new RecordBatchSizer(this));
+          }
+
+          /* We are here because of one the following
+           * 1. Completed processing of all the records and we are done
+           * 2. We've filled up the outgoing batch to the maximum and we need to return upstream
+           * Either case build the output container's schema and return
+           */
+          if (outputRecords > 0 || state == BatchState.FIRST) {
+            if (state == BatchState.FIRST) {
+              state = BatchState.NOT_FIRST;
+            }
+
+            return IterOutcome.OK;
+          }
         }
 
         // Free all partitions' in-memory data structures
