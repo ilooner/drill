@@ -494,13 +494,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
               rightHVColPosition);
           }
 
-          try {
-            // Allocate the memory for the vectors in the output container
-            batchMemoryManager.allocateVectors(container);
-          } catch (NullPointerException e) {
-            final String message = "right up " + rightUpstream + " left up " + leftUpstream + " prefetch build " + prefetchedBuild + " probe " + prefetchedProbe;
-            throw UserException.executionError(new RuntimeException(message, e)).message(message).build();
-          }
+          // Allocate the memory for the vectors in the output container
+          batchMemoryManager.allocateVectors(container);
 
           hashJoinProbe.setTargetOutputCount(batchMemoryManager.getOutputRowCount());
 

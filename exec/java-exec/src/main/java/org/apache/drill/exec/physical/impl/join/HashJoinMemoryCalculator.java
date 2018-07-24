@@ -34,7 +34,7 @@ import java.util.Set;
  * different memory calculations at each phase. The phases of execution have been broken down
  * into an explicit state machine diagram below. What ocurrs in each state is described in
  * the documentation of the {@link HashJoinState} class below. <b>Note:</b> the transition from Probing
- * and Partitioning back to Build Side Partitioning. This happens we had to spill probe side
+ * and Partitioning back to Build Side Partitioning. This happens when we had to spill probe side
  * partitions and we needed to recursively process spilled partitions. This recursion is
  * described in more detail in the example below.
  * </p>
