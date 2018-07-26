@@ -934,6 +934,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
         spilledInners[partn.getPartitionNum()] = sp; // for the outer to find the SP later
         partn.closeWriter();
+
+        partn.updateProbeRecordsPerBatch(postBuildCalc.getProbeRecordsPerBatch());
       }
     }
   }

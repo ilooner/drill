@@ -59,6 +59,7 @@ public class HashJoinMechanicalMemoryCalculator implements HashJoinMemoryCalcula
 
     private int initialPartitions;
     private PartitionStatSet partitionStatSet;
+    private int recordsPerPartitionBatchProbe;
 
     public MechanicalBuildSidePartitioning(int maxNumInMemBatches) {
       this.maxNumInMemBatches = maxNumInMemBatches;
@@ -81,6 +82,7 @@ public class HashJoinMechanicalMemoryCalculator implements HashJoinMemoryCalcula
                            int outputBatchSize,
                            double loadFactor) {
       this.initialPartitions = initialPartitions;
+      this.recordsPerPartitionBatchProbe = recordsPerPartitionBatchProbe;
     }
 
     @Override
@@ -116,7 +118,7 @@ public class HashJoinMechanicalMemoryCalculator implements HashJoinMemoryCalcula
     @Nullable
     @Override
     public PostBuildCalculations next() {
-      return new MechanicalPostBuildCalculations(maxNumInMemBatches, partitionStatSet);
+      return new MechanicalPostBuildCalculations(maxNumInMemBatches, partitionStatSet, recordsPerPartitionBatchProbe);
     }
 
     @Override
@@ -128,15 +130,23 @@ public class HashJoinMechanicalMemoryCalculator implements HashJoinMemoryCalcula
   public static class MechanicalPostBuildCalculations implements PostBuildCalculations {
     private final int maxNumInMemBatches;
     private final PartitionStatSet partitionStatSet;
+    private final int recordsPerPartitionBatchProbe;
 
-    public MechanicalPostBuildCalculations(int maxNumInMemBatches,
-                                           PartitionStatSet partitionStatSet) {
+    public MechanicalPostBuildCalculations(final int maxNumInMemBatches,
+                                           final PartitionStatSet partitionStatSet,
+                                           final int recordsPerPartitionBatchProbe) {
       this.maxNumInMemBatches = maxNumInMemBatches;
       this.partitionStatSet = Preconditions.checkNotNull(partitionStatSet);
+      this.recordsPerPartitionBatchProbe = recordsPerPartitionBatchProbe;
     }
 
     @Override
     public void initialize(boolean probeEmty) {
+    }
+
+    @Override
+    public int getProbeRecordsPerBatch() {
+      return recordsPerPartitionBatchProbe;
     }
 
     @Override

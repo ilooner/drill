@@ -90,6 +90,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
   public static class NoopBuildSidePartitioningImpl implements BuildSidePartitioning {
     private int initialPartitions;
+    private int recordsPerPartitionBatchProbe;
 
     @Override
     public void initialize(boolean autoTune,
@@ -108,6 +109,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
                            int outputBatchSize,
                            double loadFactor) {
       this.initialPartitions = initialPartitions;
+      this.recordsPerPartitionBatchProbe = recordsPerPartitionBatchProbe;
     }
 
     @Override
@@ -143,7 +145,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     @Nullable
     @Override
     public PostBuildCalculations next() {
-      return new NoopPostBuildCalculationsImpl();
+      return new NoopPostBuildCalculationsImpl(recordsPerPartitionBatchProbe);
     }
 
     @Override
@@ -516,8 +518,19 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
   }
 
   public static class NoopPostBuildCalculationsImpl implements PostBuildCalculations {
+    private final int recordsPerPartitionBatchProbe;
+
+    public NoopPostBuildCalculationsImpl(final int recordsPerPartitionBatchProbe) {
+      this.recordsPerPartitionBatchProbe = recordsPerPartitionBatchProbe;
+    }
+
     @Override
     public void initialize(boolean hasProbeData) {
+    }
+
+    @Override
+    public int getProbeRecordsPerBatch() {
+      return recordsPerPartitionBatchProbe;
     }
 
     @Override
@@ -563,6 +576,10 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
    * </p>
    */
   public static class PostBuildCalculationsImpl implements PostBuildCalculations {
+    private static final Logger log = LoggerFactory.getLogger(PostBuildCalculationsImpl.class);
+
+    public static final int MIN_RECORDS_PER_PARTITION_BATCH_PROBE = 10;
+
     private final BatchSizePredictor probeSizePredictor;
     private final long memoryAvailable;
     private final long maxOutputBatchSize;
@@ -582,6 +599,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     private boolean probeEmpty;
     private long maxProbeBatchSize;
     private long partitionProbeBatchSize;
+    private int computedProbeRecordsPerBatch;
 
     @VisibleForTesting
     public PostBuildCalculationsImpl(final BatchSizePredictor probeSizePredictor,
@@ -610,6 +628,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
       this.reserveHash = reserveHash;
       this.maxBatchNumRecordsProbe = maxBatchNumRecordsProbe;
       this.recordsPerPartitionBatchProbe = recordsPerPartitionBatchProbe;
+      this.computedProbeRecordsPerBatch = recordsPerPartitionBatchProbe;
     }
 
     @Override
@@ -633,6 +652,33 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
       maxProbeBatchSize = probeSizePredictor.predictBatchSize(maxBatchNumRecordsProbe, false);
       partitionProbeBatchSize = probeSizePredictor.predictBatchSize(recordsPerPartitionBatchProbe, reserveHash);
+
+      long worstCaseProbeMemory = calculateReservedMemory(
+        buildPartitionStatSet.getSize(),
+        maxProbeBatchSize,
+        maxOutputBatchSize,
+        partitionProbeBatchSize);
+
+      if (worstCaseProbeMemory > memoryAvailable) {
+        // We don't have enough memory for the probe data if all the partitions are spilled, we need to adjust the records
+        // per probe partition batch in order to make this work.
+
+        computedProbeRecordsPerBatch = computeProbeRecordsPerBatch(memoryAvailable,
+          buildPartitionStatSet.getSize(),
+          recordsPerPartitionBatchProbe,
+          MIN_RECORDS_PER_PARTITION_BATCH_PROBE,
+          maxProbeBatchSize,
+          maxOutputBatchSize,
+          partitionProbeBatchSize);
+
+        partitionProbeBatchSize = probeSizePredictor.predictBatchSize(computedProbeRecordsPerBatch, reserveHash);
+      }
+    }
+
+    @Override
+    public int getProbeRecordsPerBatch() {
+      Preconditions.checkState(initialized);
+      return computedProbeRecordsPerBatch;
     }
 
     @VisibleForTesting
@@ -648,6 +694,32 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     public long getConsumedMemory() {
       Preconditions.checkState(initialized);
       return consumedMemory;
+    }
+
+    public static int computeProbeRecordsPerBatch(final long memoryAvailable,
+                                                  final int numPartitions,
+                                                  final int defaultProbeRecordsPerBatch,
+                                                  final int minProbeRecordsPerBatch,
+                                                  final long maxProbeBatchSize,
+                                                  final long maxOutputBatchSize,
+                                                  final long defaultPartitionProbeBatchSize) {
+      long memoryForPartitionBatches = memoryAvailable - maxProbeBatchSize - maxOutputBatchSize;
+
+      if (memoryForPartitionBatches < 0) {
+        // We just don't have enough memory. We should do our best though by using the minimum batch size.
+        log.warn("Not enough memory for probing:\n" +
+          "Memory available: {}\n" +
+          "Max probe batch size: {}\n" +
+          "Max output batch size: {}",
+          memoryAvailable,
+          maxProbeBatchSize,
+          maxOutputBatchSize);
+        return minProbeRecordsPerBatch;
+      }
+
+      long memoryForPartitionBatch = (memoryForPartitionBatches + numPartitions - 1) / numPartitions;
+      long scaleFactor = (defaultPartitionProbeBatchSize + memoryForPartitionBatch - 1) / memoryForPartitionBatch;
+      return Math.max((int) (defaultProbeRecordsPerBatch / scaleFactor), minProbeRecordsPerBatch);
     }
 
     public static long calculateReservedMemory(final int numSpilledPartitions,

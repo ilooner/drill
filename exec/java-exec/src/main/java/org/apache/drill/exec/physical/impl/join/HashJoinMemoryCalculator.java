@@ -136,6 +136,8 @@ public interface HashJoinMemoryCalculator extends HashJoinStateCalculator<HashJo
      */
     void initialize(boolean probeEmty);
 
+    int getProbeRecordsPerBatch();
+
     boolean shouldSpill();
 
     String makeDebugString();
