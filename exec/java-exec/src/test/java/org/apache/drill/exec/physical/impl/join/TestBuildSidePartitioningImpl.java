@@ -62,7 +62,7 @@ public class TestBuildSidePartitioningImpl {
 
     long expectedReservedMemory = 60 // Max incoming batch size
       + 2 * 30 // build side batch for each spilled partition
-      + 60; // Max incoming probe batch size
+      + 10; // Max incoming probe batch size
     long actualReservedMemory = calc.getBuildReservedMemory();
 
     Assert.assertEquals(expectedReservedMemory, actualReservedMemory);
@@ -107,7 +107,7 @@ public class TestBuildSidePartitioningImpl {
 
     long expectedReservedMemory = 60 // Max incoming batch size
       + 2 * (/* data size for batch */ 30 + /* Space reserved for hash value vector */ 10 * 4 * 2) // build side batch for each spilled partition
-      + 60; // Max incoming probe batch size
+      + 10; // Max incoming probe batch size
     long actualReservedMemory = calc.getBuildReservedMemory();
 
     Assert.assertEquals(expectedReservedMemory, actualReservedMemory);
@@ -154,7 +154,7 @@ public class TestBuildSidePartitioningImpl {
 
     long expectedReservedMemory = 60 // Max incoming batch size
       + 2 * 30 // build side batch for each spilled partition
-      + 60; // Max incoming probe batch size
+      + 10; // Max incoming probe batch size
     long actualReservedMemory = calc.getBuildReservedMemory();
 
     Assert.assertEquals(expectedReservedMemory, actualReservedMemory);
@@ -235,12 +235,11 @@ public class TestBuildSidePartitioningImpl {
     calc.setPartitionStatSet(partitionStatSet);
 
     long expectedReservedMemory = 60 // Max incoming batch size
-      + 2 * 30 // build side batch for each spilled partition
-      + maxIncomingBatchSize;
+      + 4 * 30; // build side batch for each spilled partition
     long actualReservedMemory = calc.getBuildReservedMemory();
 
     Assert.assertEquals(expectedReservedMemory, actualReservedMemory);
-    Assert.assertEquals(2, calc.getNumPartitions());
+    Assert.assertEquals(4, calc.getNumPartitions());
   }
 
   @Test
@@ -309,7 +308,7 @@ public class TestBuildSidePartitioningImpl {
       true,
       false,
       keySizes,
-      180,
+      130,
       100, // Ignored for test
       2,
       false,
@@ -330,7 +329,7 @@ public class TestBuildSidePartitioningImpl {
 
     long expectedReservedMemory = 60 // Max incoming batch size
       + 2 * 30 // build side batch for each spilled partition
-      + 60; // Max incoming probe batch size
+      + 10; // Max incoming probe batch size
     long actualReservedMemory = calc.getBuildReservedMemory();
 
     Assert.assertEquals(expectedReservedMemory, actualReservedMemory);
@@ -360,7 +359,7 @@ public class TestBuildSidePartitioningImpl {
       true,
       false,
       keySizes,
-      210,
+      160,
       100, // Ignored for test
       2,
       false,

@@ -391,7 +391,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         // probe batch we sniffed.
         // TODO when batch sizing project is complete we won't have to sniff probe batches since
         // they will have a well defined size.
-        reservedMemory = incompletePartitionsBatchSizes + maxBuildBatchSize + maxProbeBatchSize;
+        reservedMemory = incompletePartitionsBatchSizes + maxBuildBatchSize + probeSizePredictor.getBatchSize();
 
         if (probeSizePredictor.hasData()) {
           // If we have probe data, use it in our memory reservation calculations.
