@@ -124,6 +124,7 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
   private long partitionInMemorySize;
   private long numInMemoryRecords;
   private boolean updatedRecordsPerBatch = false;
+  private boolean builtHashTableAndHelper = false;
 
   public HashPartition(FragmentContext context, BufferAllocator allocator, ChainedHashTable baseHashTable,
                        RecordBatch buildBatch, RecordBatch probeBatch,
@@ -442,6 +443,17 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
     return partitionInMemorySize;
   }
 
+  @Override
+  public long getHashTableSize() {
+    Preconditions.checkState(builtHashTableAndHelper); // Only get the size of the hash table if we've built it
+    return hashTable.getActualSize();
+  }
+
+  @Override
+  public boolean builtHashTableAndHelper() {
+    return builtHashTableAndHelper;
+  }
+
   public String getSpillFile() {
     return spillFile;
   }
@@ -491,6 +503,9 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
    * have been consumed.
    */
   public void buildContainersHashTableAndHelper() throws SchemaChangeException {
+    Preconditions.checkState(!builtHashTableAndHelper); // If this method is called more than once throw an exception.
+    builtHashTableAndHelper = true;
+
     if ( isSpilled ) { return; } // no building for spilled partitions
     containers = new ArrayList<>();
     hashTable.updateInitialCapacity((int) getNumInMemoryRecords());

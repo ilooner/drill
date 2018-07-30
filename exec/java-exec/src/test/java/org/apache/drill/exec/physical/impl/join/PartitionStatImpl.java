@@ -31,9 +31,16 @@ public class PartitionStatImpl implements HashJoinMemoryCalculator.PartitionStat
   private boolean spilled;
   private long numRecords;
   private long partitionSize;
+  private long hashTableSize;
+  private boolean builtHashTableAndHelper;
   private LinkedList<HashJoinMemoryCalculator.BatchStat> batchStats = Lists.newLinkedList();
 
   public PartitionStatImpl() {
+  }
+
+  public void setHashTableAndHelperSize(long hashTableSize) {
+    this.hashTableSize = hashTableSize;
+    builtHashTableAndHelper = true;
   }
 
   public void add(HashJoinMemoryCalculator.BatchStat batchStat) {
@@ -49,31 +56,37 @@ public class PartitionStatImpl implements HashJoinMemoryCalculator.PartitionStat
     spilled = true;
     partitionSize = 0;
     numRecords = 0;
+    hashTableSize = 0;
     batchStats.clear();
   }
 
-  public List<HashJoinMemoryCalculator.BatchStat> getInMemoryBatches()
-  {
+  public List<HashJoinMemoryCalculator.BatchStat> getInMemoryBatches() {
     return Collections.unmodifiableList(batchStats);
   }
 
-  public int getNumInMemoryBatches()
-  {
+  public int getNumInMemoryBatches() {
     return batchStats.size();
   }
 
-  public boolean isSpilled()
-  {
+  public boolean isSpilled() {
     return spilled;
   }
 
-  public long getNumInMemoryRecords()
-  {
+  public long getNumInMemoryRecords() {
     return numRecords;
   }
 
-  public long getInMemorySize()
-  {
+  public long getInMemorySize() {
     return partitionSize;
+  }
+
+  @Override
+  public long getHashTableSize() {
+    return hashTableSize;
+  }
+
+  @Override
+  public boolean builtHashTableAndHelper() {
+    return builtHashTableAndHelper;
   }
 }

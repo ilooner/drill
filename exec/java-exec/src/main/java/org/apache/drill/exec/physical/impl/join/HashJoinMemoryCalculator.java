@@ -138,7 +138,14 @@ public interface HashJoinMemoryCalculator extends HashJoinStateCalculator<HashJo
 
     int getProbeRecordsPerBatch();
 
-    boolean shouldSpill();
+    /**
+     * Checks whether or not to spill the partition at the given index.
+     * @param partitionIndex The index of the partition to check whether to spill or not.
+     * @return True if the partition corresponding to the given index should be spilled. False if it should not be spilled.
+     * @throws IllegalArgumentException if the given partitionIndex is not valid. Or if the partition corresponding to the given index has already built its HashTable or been
+     * spilled.
+     */
+    boolean shouldSpill(int partitionIndex);
 
     String makeDebugString();
   }
@@ -153,6 +160,19 @@ public interface HashJoinMemoryCalculator extends HashJoinStateCalculator<HashJo
     long getNumInMemoryRecords();
 
     long getInMemorySize();
+
+    /**
+     * Gets the size of the HashTable created for the partition.
+     * @return The number of bytes consumed by the HashTable for this partition.
+     * @throws IllegalStateException If this partition does not have a HashTable created yet.
+     */
+    long getHashTableSize();
+
+    /**
+     * True if the HashTable and HashJoinHelper have been built. False otherwise.
+     * @return True if the HashTable and HashJoinHelper have been built. False otherwise.
+     */
+    boolean builtHashTableAndHelper();
   }
 
   /**

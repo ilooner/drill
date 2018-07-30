@@ -467,7 +467,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         consumedMemory += ((long) IntVector.VALUE_WIDTH) * partitionStatsSet.getNumInMemoryRecords();
       }
 
-      consumedMemory += RecordBatchSizer.multiplyByFactor(partitionStatsSet.getConsumedMemory(), fragmentationFactor);
+      consumedMemory += partitionStatsSet.getConsumedMemory();
       return consumedMemory > memoryAvailable;
     }
 
@@ -534,7 +534,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     }
 
     @Override
-    public boolean shouldSpill() {
+    public boolean shouldSpill(int partitionIndex) {
       return false;
     }
 
@@ -568,7 +568,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
    *   <ul>
    *     <li><b>Step 1:</b> Call {@link #initialize(boolean)}. This
    *     gives the {@link HashJoinStateCalculator} additional information it needs to compute memory requirements.</li>
-   *     <li><b>Step 2:</b> Call {@link #shouldSpill()}. This tells
+   *     <li><b>Step 2:</b> Call {@link #shouldSpill(int)}. This tells
    *     you which build side partitions need to be spilled in order to make room for probing.</li>
    *     <li><b>Step 3:</b> Call {@link #next()}. After you are done probing
    *     and partitioning the probe side, get the next calculator.</li>
@@ -734,8 +734,14 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
     }
 
     @Override
-    public boolean shouldSpill() {
+    public boolean shouldSpill(int partitionIndexToCheck) {
       Preconditions.checkState(initialized);
+      // Check if the index is valid
+      Preconditions.checkArgument(partitionIndexToCheck < buildPartitionStatSet.getSize());
+
+      final PartitionStat partitionToCheck = buildPartitionStatSet.get(partitionIndexToCheck);
+      // We shouldn't be calling this method on a partition that has already been spilled or has already had its HashTable built.
+      Preconditions.checkArgument(!partitionToCheck.isSpilled() && !partitionToCheck.builtHashTableAndHelper());
 
       if (probeEmpty) {
         // If the probe is empty, we should not trigger any spills.
@@ -750,7 +756,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
       // We are consuming our reserved memory plus the amount of memory for each build side
       // batch and the size of the hashtables and the size of the join helpers
-      consumedMemory = reservedMemory + RecordBatchSizer.multiplyByFactor(buildPartitionStatSet.getConsumedMemory(), fragmentationFactor);
+      consumedMemory = reservedMemory + buildPartitionStatSet.getConsumedMemory();
 
       // Handle early completion conditions
       if (buildPartitionStatSet.allSpilled()) {
@@ -767,8 +773,24 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
           continue;
         }
 
-        long hashTableSize = hashTableSizeCalculator.calculateSize(partitionStat, keySizes, loadFactor, safetyFactor, fragmentationFactor);
-        long hashJoinHelperSize = hashJoinHelperSizeCalculator.calculateSize(partitionStat, fragmentationFactor);
+        final long hashTableSize;
+        final long hashJoinHelperSize;
+
+        if (partitionIndex == partitionIndexToCheck) {
+          // This is the partition we are checking, so we have to predict the hash table size.
+          hashTableSize = hashTableSizeCalculator.calculateSize(partitionStat, keySizes, loadFactor, safetyFactor, fragmentationFactor);
+          hashJoinHelperSize = hashJoinHelperSizeCalculator.calculateSize(partitionStat, fragmentationFactor);
+        } else {
+          if (partitionStat.builtHashTableAndHelper()) {
+            // If we have built the HashTable for the partition, get the actual amount of memory it consumes.
+            hashTableSize = partitionStat.getHashTableSize();
+            hashJoinHelperSize = hashJoinHelperSizeCalculator.calculateSize(partitionStat, fragmentationFactor);
+          } else {
+            // If the partition is spilled or has not had its HashTable built yet, don't think about the HashTable and helper sizes yet.
+            hashTableSize = 0;
+            hashJoinHelperSize = 0;
+          }
+        }
 
         consumedMemory += hashTableSize + hashJoinHelperSize;
       }

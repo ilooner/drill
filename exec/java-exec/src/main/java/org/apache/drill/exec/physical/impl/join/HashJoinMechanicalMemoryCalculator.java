@@ -150,7 +150,7 @@ public class HashJoinMechanicalMemoryCalculator implements HashJoinMemoryCalcula
     }
 
     @Override
-    public boolean shouldSpill() {
+    public boolean shouldSpill(int partitionIndex) {
       return partitionStatSet.getNumInMemoryBatches() > maxNumInMemBatches;
     }
 

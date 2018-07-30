@@ -142,8 +142,8 @@ public interface HashTable {
   String makeDebugString();
 
   /**
-   * The amount of direct memory consumed by the hash table.
-   * @return
+   * The amount of direct memory consumed by the hash table in bytes.
+   * @return The amount of direct memory consumed by the hash table in bytes.
    */
   long getActualSize();
 

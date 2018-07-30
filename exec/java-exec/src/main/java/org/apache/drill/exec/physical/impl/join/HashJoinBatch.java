@@ -902,7 +902,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       }
 
       try {
-        if (postBuildCalc.shouldSpill()) {
+        if (postBuildCalc.shouldSpill(index)) {
           // Spill this partition if we need to make room
           partn.spillThisPartition();
         } else {
