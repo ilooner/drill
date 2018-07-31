@@ -373,9 +373,6 @@ public class TestPostBuildCalculationsImpl {
     final HashJoinMemoryCalculator.PartitionStatSet buildPartitionStatSet =
       new HashJoinMemoryCalculator.PartitionStatSet(partition1, partition2);
 
-    partition1.spill();
-    partition2.spill();
-
     final double fragmentationFactor = 2.0;
     final double safetyFactor = 1.5;
 
@@ -405,10 +402,13 @@ public class TestPostBuildCalculationsImpl {
 
     calc.initialize(false);
 
+    partition1.spill();
+    partition2.spill();
+    calc.calculateConsumedMemory();
+
     long expected = 60 // maxProbeBatchSize
       + 2 * 5 * 3 // partition batches
       + 20; // max output batch size
-    Assert.assertFalse(calc.shouldSpill(0));
     Assert.assertEquals(expected, calc.getConsumedMemory());
     Assert.assertNotNull(calc.next());
   }
@@ -527,25 +527,21 @@ public class TestPostBuildCalculationsImpl {
       + 10 // hash join helper size
       + 15 * 3 // max batch size for each spill probe partition
       + 20;
-    Assert.assertTrue(calc.shouldSpill(0));
+    Assert.assertTrue(calc.shouldSpill(2));
     partition3.spill();
-    Assert.assertFalse(calc.shouldSpill(1));
+    Assert.assertFalse(calc.shouldSpill(3));
     Assert.assertEquals(expected, calc.getConsumedMemory());
     Assert.assertNotNull(calc.next());
   }
 
   @Test
   public void testProbingAndPartitioningBuildNoneInMemory() {
-
     final Map<String, Long> keySizes = org.apache.drill.common.map.CaseInsensitiveMap.newHashMap();
 
     final PartitionStatImpl partition1 = new PartitionStatImpl();
     final PartitionStatImpl partition2 = new PartitionStatImpl();
     final HashJoinMemoryCalculator.PartitionStatSet buildPartitionStatSet =
       new HashJoinMemoryCalculator.PartitionStatSet(partition1, partition2);
-
-    partition1.spill();
-    partition2.spill();
 
     final double fragmentationFactor = 2.0;
     final double safetyFactor = 1.5;
@@ -577,8 +573,11 @@ public class TestPostBuildCalculationsImpl {
         false);
 
     calc.initialize(false);
-    Assert.assertFalse(calc.shouldSpill(0));
-    Assert.assertFalse(calc.shouldSpill(1));
+
+    partition1.spill();
+    partition2.spill();
+    calc.calculateConsumedMemory();
+
     Assert.assertEquals(110, calc.getConsumedMemory());
     Assert.assertNotNull(calc.next());
   }

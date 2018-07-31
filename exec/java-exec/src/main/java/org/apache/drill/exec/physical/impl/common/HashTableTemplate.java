@@ -35,6 +35,7 @@ import org.apache.drill.exec.memory.BufferAllocator;
 import org.apache.drill.exec.physical.impl.join.HashJoinMemoryCalculator;
 import org.apache.drill.exec.record.MaterializedField;
 import org.apache.drill.exec.record.RecordBatch;
+import org.apache.drill.exec.record.RecordBatchLedgerSizer;
 import org.apache.drill.exec.record.RecordBatchSizer;
 import org.apache.drill.exec.record.TransferPair;
 import org.apache.drill.exec.record.VectorContainer;
@@ -439,7 +440,7 @@ public abstract class HashTableTemplate implements HashTable {
         size += ledger.getAccountedSize();
       }
 
-      size += new RecordBatchSizer(htContainer).getActualSize();
+      size += new RecordBatchLedgerSizer(htContainer).getActualSize();
       return size;
     }
   }

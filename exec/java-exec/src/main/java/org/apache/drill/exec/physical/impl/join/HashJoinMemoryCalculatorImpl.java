@@ -596,6 +596,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
     private boolean initialized;
     private long consumedMemory;
+    private boolean calculatedConsumedMemory;
     private boolean probeEmpty;
     private long maxProbeBatchSize;
     private long partitionProbeBatchSize;
@@ -693,6 +694,8 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
     public long getConsumedMemory() {
       Preconditions.checkState(initialized);
+      Preconditions.checkState(calculatedConsumedMemory);
+
       return consumedMemory;
     }
 
@@ -748,6 +751,28 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         return false;
       }
 
+      consumedMemory = caclulateConsumedMemory(partitionIndexToCheck);
+      return consumedMemory > memoryAvailable;
+    }
+
+    /**
+     * This method calculates the consumed memory after all the partitions are either spilled or have had their HashTables built.
+     */
+    @VisibleForTesting
+    public void calculateConsumedMemory() {
+      for (int partitionIndex = 0; partitionIndex < buildPartitionStatSet.getSize(); partitionIndex++) {
+        final PartitionStat partitionStat = buildPartitionStatSet.get(partitionIndex);
+        Preconditions.checkState(partitionStat.isSpilled() || partitionStat.builtHashTableAndHelper());
+      }
+
+      consumedMemory = caclulateConsumedMemory(-1);
+    }
+
+    private long caclulateConsumedMemory(int partitionIndexToCheck) {
+      // Check if the index is valid or -1
+      Preconditions.checkArgument(partitionIndexToCheck < buildPartitionStatSet.getSize() || partitionIndexToCheck == -1);
+      calculatedConsumedMemory = true;
+
       long reservedMemory = calculateReservedMemory(
         buildPartitionStatSet.getNumSpilledPartitions(),
         maxProbeBatchSize,
@@ -756,13 +781,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
 
       // We are consuming our reserved memory plus the amount of memory for each build side
       // batch and the size of the hashtables and the size of the join helpers
-      consumedMemory = reservedMemory + buildPartitionStatSet.getConsumedMemory();
-
-      // Handle early completion conditions
-      if (buildPartitionStatSet.allSpilled()) {
-        // All build side partitions are spilled so our memory calculation is complete
-        return false;
-      }
+      long consumedMemory = reservedMemory + buildPartitionStatSet.getConsumedMemory();
 
       for (int partitionIndex: buildPartitionStatSet.getInMemoryPartitions()) {
         final PartitionStat partitionStat = buildPartitionStatSet.get(partitionIndex);
@@ -795,7 +814,7 @@ public class HashJoinMemoryCalculatorImpl implements HashJoinMemoryCalculator {
         consumedMemory += hashTableSize + hashJoinHelperSize;
       }
 
-      return consumedMemory > memoryAvailable;
+      return consumedMemory;
     }
 
     @Nullable

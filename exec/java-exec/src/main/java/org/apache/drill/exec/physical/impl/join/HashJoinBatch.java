@@ -456,8 +456,8 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       }
 
       // Try to probe and project, or recursively handle a spilled partition
-      if ( ! buildSideIsEmpty ||  // If there are build-side rows
-           joinType != JoinRelType.INNER) {  // or if this is a left/full outer join
+      if (!buildSideIsEmpty ||  // If there are build-side rows
+        joinType != JoinRelType.INNER) {  // or if this is a left/full outer join
 
         if (!prefetchedProbe) {
           prefetchedProbe = true;
@@ -481,17 +481,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
           if (state == BatchState.FIRST) {
             // Initialize various settings for the probe side
-            hashJoinProbe.setupHashJoinProbe(probeBatch,
-              this,
-              joinType,
-              leftUpstream,
-              partitions,
-              cycleNum,
-              container,
-              spilledInners,
-              buildSideIsEmpty,
-              numPartitions,
-              rightHVColPosition);
+            hashJoinProbe.setupHashJoinProbe(probeBatch, this, joinType, leftUpstream, partitions, cycleNum, container, spilledInners, buildSideIsEmpty, numPartitions, rightHVColPosition);
           }
 
           // Allocate the memory for the vectors in the output container
@@ -527,14 +517,14 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
         // Free all partitions' in-memory data structures
         // (In case need to start processing spilled partitions)
-        for ( HashPartition partn : partitions ) {
+        for (HashPartition partn : partitions) {
           partn.cleanup(false); // clean, but do not delete the spill files !!
         }
 
         //
         //  (recursively) Handle the spilled partitions, if any
         //
-        if ( !buildSideIsEmpty && !spilledPartitionsList.isEmpty()) {
+        if (!buildSideIsEmpty && !spilledPartitionsList.isEmpty()) {
           // Get the next (previously) spilled partition to handle as incoming
           HJSpilledPartition currSp = spilledPartitionsList.remove(0);
 
@@ -543,7 +533,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           // The above ctor call also got the first batch; need to update the outcome
           rightUpstream = ((SpilledRecordbatch) buildBatch).getInitialOutcome();
 
-          if ( currSp.outerSpilledBatches > 0 ) {
+          if (currSp.outerSpilledBatches > 0) {
             // Create a PROBE-side "incoming" out of the outer spill file of that partition
             probeBatch = new SpilledRecordbatch(currSp.outerSpillFile, currSp.outerSpilledBatches, context, probeSchema, oContext, spillSet);
             // The above ctor call also got the first batch; need to update the outcome
@@ -560,25 +550,28 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
             cycleNum = 1 + currSp.cycleNum;
             stats.setLongStat(Metric.SPILL_CYCLE, cycleNum); // update stats
             // report first spill or memory stressful situations
-            if (cycleNum == 1) { logger.info("Started reading spilled records "); }
-            if (cycleNum == 2) { logger.info("SECONDARY SPILLING "); }
-            if (cycleNum == 3) { logger.warn("TERTIARY SPILLING ");  }
-            if (cycleNum == 4) { logger.warn("QUATERNARY SPILLING "); }
-            if (cycleNum == 5) { logger.warn("QUINARY SPILLING "); }
-            if ( cycleNum * bitsInMask > 20 ) {
+            if (cycleNum == 1) {
+              logger.info("Started reading spilled records ");
+            }
+            if (cycleNum == 2) {
+              logger.info("SECONDARY SPILLING ");
+            }
+            if (cycleNum == 3) {
+              logger.warn("TERTIARY SPILLING ");
+            }
+            if (cycleNum == 4) {
+              logger.warn("QUATERNARY SPILLING ");
+            }
+            if (cycleNum == 5) {
+              logger.warn("QUINARY SPILLING ");
+            }
+            if (cycleNum * bitsInMask > 20) {
               spilledPartitionsList.add(currSp); // so cleanup() would delete the curr spill files
               this.cleanup();
-              throw UserException
-                .unsupportedError()
-                .message("Hash-Join can not partition the inner data any further (probably due to too many join-key duplicates)\n"
-                + "On cycle num %d mem available %d num partitions %d", cycleNum, allocator.getLimit(), numPartitions)
-                .build(logger);
+              throw UserException.unsupportedError().message("Hash-Join can not partition the inner data any further (probably due to too many join-key duplicates)\n" + "On cycle num %d mem available %d num partitions %d", cycleNum, allocator.getLimit(), numPartitions).build(logger);
             }
           }
-          logger.debug("Start reading spilled partition {} (prev {}) from cycle {} (with {}-{} batches)." +
-              " More {} spilled partitions left.",
-            currSp.origPartn, currSp.prevOrigPartn, currSp.cycleNum, currSp.outerSpilledBatches,
-            currSp.innerSpilledBatches, spilledPartitionsList.size());
+          logger.debug("Start reading spilled partition {} (prev {}) from cycle {} (with {}-{} batches)." + " More {} spilled partitions left.", currSp.origPartn, currSp.prevOrigPartn, currSp.cycleNum, currSp.outerSpilledBatches, currSp.innerSpilledBatches, spilledPartitionsList.size());
 
           state = BatchState.FIRST;  // TODO need to determine if this is still necessary since prefetchFirstBatchFromBothSides sets this
 
@@ -608,6 +601,9 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       this.cleanup();
 
       return IterOutcome.NONE;
+    } catch (IllegalStateException e) {
+      e.printStackTrace();
+      throw e;
     } catch (SchemaChangeException e) {
       context.getExecutorState().fail(e);
       killIncoming(false);

@@ -17,7 +17,6 @@
  */
 package org.apache.drill.exec.record;
 
-import java.util.Set;
 import java.util.Map;
 
 import org.apache.drill.common.map.CaseInsensitiveMap;
@@ -40,7 +39,6 @@ import org.apache.drill.exec.vector.complex.RepeatedMapVector;
 import org.apache.drill.exec.vector.complex.RepeatedValueVector;
 import org.apache.drill.exec.vector.VariableWidthVector;
 
-import com.google.common.collect.Sets;
 import org.apache.drill.exec.vector.complex.RepeatedVariableWidthVectorLike;
 import org.bouncycastle.util.Strings;
 
@@ -643,6 +641,10 @@ public class RecordBatchSizer {
    */
   private long accountedMemorySize;
   /**
+   * Used to compute the actual memory usage.
+   */
+  private RecordBatchLedgerSizer ledgerSizer;
+  /**
    * Actual row width computed by dividing total batch memory by the
    * record count.
    */
@@ -664,8 +666,6 @@ public class RecordBatchSizer {
   private int sv2Size;
 
   private int avgDensity;
-
-  private Set<BufferLedger> ledgers = Sets.newIdentityHashSet();
 
   private long netBatchSize;
 
@@ -711,6 +711,7 @@ public class RecordBatchSizer {
    */
 
   public RecordBatchSizer(VectorAccessible va, SelectionVector2 sv2) {
+    ledgerSizer = new RecordBatchLedgerSizer(va);
     rowCount = va.getRecordCount();
     for (VectorWrapper<?> vw : va) {
       ColumnSize colSize = measureColumn(vw.getValueVector(), "");
@@ -765,7 +766,6 @@ public class RecordBatchSizer {
         }
         break;
       default:
-        v.collectLedgers(ledgers);
     }
 
     netRowWidthCap50 += ! colSize.isVariableWidth ? colSize.getNetSizePerEntry() :
@@ -779,20 +779,10 @@ public class RecordBatchSizer {
     for (ValueVector vector : mapVector) {
       colSize.children.put(vector.getField().getName(), measureColumn(vector, prefix));
     }
-
-    // For a repeated map, we need the memory for the offset vector (only).
-    // Map elements are recursively expanded above.
-
-    if (mapVector.getField().getDataMode() == DataMode.REPEATED) {
-      ((RepeatedMapVector) mapVector).getOffsetVector().collectLedgers(ledgers);
-    }
   }
 
   private void expandList(ColumnSize colSize, RepeatedListVector vector, String prefix) {
     colSize.children.put(vector.getField().getName(), measureColumn(vector.getDataVector(), prefix));
-
-    // Determine memory for the offset vector (only).
-    vector.collectLedgers(ledgers);
   }
 
   public static int safeDivide(long num, long denom) {
@@ -854,9 +844,7 @@ public class RecordBatchSizer {
       return accountedMemorySize;
     }
 
-    for (BufferLedger ledger : ledgers) {
-      accountedMemorySize += ledger.getAccountedSize();
-    }
+    accountedMemorySize += ledgerSizer.getActualSize();
 
     if (sv2 != null) {
       sv2Size = sv2.getBuffer(false).capacity();
