@@ -243,7 +243,7 @@ public class TestPostBuildCalculationsImpl {
     Assert.assertNull(calc.next());
   }
 
-  @Test
+  @Test // TODO check if this is right
   public void testProbingAndPartitioningBuildAllInMemoryNoSpill() {
     final Map<String, Long> keySizes = org.apache.drill.common.map.CaseInsensitiveMap.newHashMap();
 
@@ -273,7 +273,7 @@ public class TestPostBuildCalculationsImpl {
           Lists.newArrayList(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe),
           Lists.newArrayList(maxProbeBatchSize, partitionProbeBatchSize),
           true),
-        290,
+        200,
         20,
         maxBatchNumRecordsProbe,
         recordsPerPartitionBatchProbe,
@@ -289,12 +289,21 @@ public class TestPostBuildCalculationsImpl {
     calc.initialize(false);
 
     long expected = 60 // maxProbeBatchSize
-      + 160 // in memory partitions
+      + 80 // in memory partitions
+      + 20 // max output batch size
+      + 10 // Hash Table
+      + 10; // Hash join helper
+    Assert.assertFalse(calc.shouldSpill(0));
+    Assert.assertEquals(expected, calc.getConsumedMemory());
+    partition1.setHashTableSize(10);
+
+    expected = 60 // maxProbeBatchSize
+      + 80 // in memory partitions
       + 20 // max output batch size
       + 2 * 10 // Hash Table
       + 2 * 10; // Hash join helper
-    Assert.assertFalse(calc.shouldSpill(0));
     Assert.assertFalse(calc.shouldSpill(1));
+    partition2.setHashTableSize(10);
     Assert.assertEquals(expected, calc.getConsumedMemory());
     Assert.assertNull(calc.next());
   }
@@ -329,7 +338,7 @@ public class TestPostBuildCalculationsImpl {
           Lists.newArrayList(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe),
           Lists.newArrayList(maxProbeBatchSize, partitionProbeBatchSize),
           true),
-        270,
+        190,
         20,
          maxBatchNumRecordsProbe,
         recordsPerPartitionBatchProbe,
@@ -345,22 +354,22 @@ public class TestPostBuildCalculationsImpl {
     calc.initialize(false);
 
     long expected = 60 // maxProbeBatchSize
-      + 160 // in memory partitions
+      + 80 // in memory partitions
       + 20 // max output batch size
-      + 2 * 10 // Hash Table
-      + 2 * 10; // Hash join helper
-    Assert.assertTrue(calc.shouldSpill(0));
+      + 10 // Hash Table
+      + 10; // Hash join helper
+    Assert.assertFalse(calc.shouldSpill(0));
     Assert.assertEquals(expected, calc.getConsumedMemory());
-    partition1.spill();
+    partition1.setHashTableSize(20);
 
     expected = 60 // maxProbeBatchSize
       + 80 // in memory partitions
       + 20 // max output batch size
-      + 10 // Hash Table
-      + 10 // Hash join helper
-      + 15; // partition batch size
-    Assert.assertFalse(calc.shouldSpill(1));
+      + 20 + 10 // Hash Table
+      + 2 * 10; // Hash join helper
+    Assert.assertTrue(calc.shouldSpill(1));
     Assert.assertEquals(expected, calc.getConsumedMemory());
+    partition2.spill();
     Assert.assertNotNull(calc.next());
   }
 
@@ -525,12 +534,23 @@ public class TestPostBuildCalculationsImpl {
       + 80 // in memory partition
       + 10 // hash table size
       + 10 // hash join helper size
-      + 15 * 3 // max batch size for each spill probe partition
+      + partitionProbeBatchSize * 2 // max batch size for each spill probe partition
       + 20;
-    Assert.assertTrue(calc.shouldSpill(2));
-    partition3.spill();
-    Assert.assertFalse(calc.shouldSpill(3));
+
+    Assert.assertFalse(calc.shouldSpill(2));
+    partition3.setHashTableSize(40);
     Assert.assertEquals(expected, calc.getConsumedMemory());
+
+    expected = 60 // maxProbeBatchSize
+      + 80 // in memory partition
+      + 40 + 10 // hash table size
+      + 2 * 10 // hash join helper size
+      + partitionProbeBatchSize * 2 // max batch size for each spill probe partition
+      + 20;
+
+    Assert.assertTrue(calc.shouldSpill(3));
+    Assert.assertEquals(expected, calc.getConsumedMemory());
+    partition4.spill();
     Assert.assertNotNull(calc.next());
   }
 

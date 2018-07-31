@@ -38,7 +38,7 @@ public class PartitionStatImpl implements HashJoinMemoryCalculator.PartitionStat
   public PartitionStatImpl() {
   }
 
-  public void setHashTableAndHelperSize(long hashTableSize) {
+  public void setHashTableSize(long hashTableSize) {
     this.hashTableSize = hashTableSize;
     builtHashTableAndHelper = true;
   }
