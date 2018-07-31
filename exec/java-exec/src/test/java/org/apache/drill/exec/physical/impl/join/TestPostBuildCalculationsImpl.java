@@ -217,7 +217,7 @@ public class TestPostBuildCalculationsImpl {
           Lists.newArrayList(maxBatchNumRecordsProbe, recordsPerPartitionBatchProbe),
           Lists.newArrayList(maxProbeBatchSize, partitionProbeBatchSize),
           false),
-        290,
+        200,
         20,
         maxBatchNumRecordsProbe,
         recordsPerPartitionBatchProbe,
@@ -233,12 +233,21 @@ public class TestPostBuildCalculationsImpl {
     calc.initialize(false);
 
     long expected = 60 // maxProbeBatchSize
-      + 160 // in memory partitions
+      + 80 // in memory partitions
+      + 20 // max output batch size
+      + 10 // Hash Table
+      + 10; // Hash join helper
+    Assert.assertFalse(calc.shouldSpill(0));
+    Assert.assertEquals(expected, calc.getConsumedMemory());
+    partition1.setHashTableSize(10);
+
+    expected = 60 // maxProbeBatchSize
+      + 80 // in memory partitions
       + 20 // max output batch size
       + 2 * 10 // Hash Table
       + 2 * 10; // Hash join helper
-    Assert.assertFalse(calc.shouldSpill(0));
     Assert.assertFalse(calc.shouldSpill(1));
+    partition2.setHashTableSize(10);
     Assert.assertEquals(expected, calc.getConsumedMemory());
     Assert.assertNull(calc.next());
   }
@@ -471,13 +480,19 @@ public class TestPostBuildCalculationsImpl {
       + 80 // in memory partition
       + 10 // hash table size
       + 10 // hash join helper size
-      + 15 // max partition probe batch size
       + 20; // outgoing batch size
-
-    Assert.assertTrue(calc.shouldSpill(0));
-    partition1.spill();
-    Assert.assertFalse(calc.shouldSpill(1));
+    Assert.assertFalse(calc.shouldSpill(0));
     Assert.assertEquals(expected, calc.getConsumedMemory());
+    partition1.setHashTableSize(30);
+
+    expected = 60 // maxProbeBatchSize
+      + 80 // in memory partition
+      + 30 + 10 // hash table size
+      + 2 * 10 // hash join helper size
+      + 20; // outgoing batch size
+    Assert.assertTrue(calc.shouldSpill(1));
+    Assert.assertEquals(expected, calc.getConsumedMemory());
+    partition1.spill();
     Assert.assertNotNull(calc.next());
   }
 
