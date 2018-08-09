@@ -19,8 +19,12 @@ package org.apache.drill.exec.physical.rowSet.impl;
 
 import org.apache.drill.exec.record.metadata.ColumnMetadata;
 import org.apache.drill.exec.record.metadata.TupleMetadata;
+import org.apache.drill.exec.record.metadata.VariantMetadata;
+import org.apache.drill.exec.record.metadata.ColumnMetadata.StructureType;
 import org.apache.drill.exec.vector.accessor.ObjectWriter;
 import org.apache.drill.exec.vector.accessor.TupleWriter;
+import org.apache.drill.exec.vector.accessor.VariantWriter;
+import org.apache.drill.exec.vector.accessor.writer.RepeatedListWriter;
 
 /**
  * Build the set of writers from a defined schema. Uses the same
@@ -46,8 +50,34 @@ public class BuildFromSchema {
 
     @Override
     public ObjectWriter add(ColumnMetadata colSchema) {
-      int index = writer.addColumn(colSchema);
+      final int index = writer.addColumn(colSchema);
       return writer.column(index);
+    }
+  }
+
+  private static class UnionShim implements ParentShim {
+    private final VariantWriter writer;
+
+    public UnionShim(VariantWriter writer) {
+      this.writer = writer;
+    }
+
+    @Override
+    public ObjectWriter add(ColumnMetadata colSchema) {
+      return writer.addMember(colSchema);
+    }
+  }
+
+  private static class RepeatedListShim implements ParentShim {
+    private final RepeatedListWriter writer;
+
+    public RepeatedListShim(RepeatedListWriter writer) {
+      this.writer = writer;
+    }
+
+    @Override
+    public ObjectWriter add(ColumnMetadata colSchema) {
+      return writer.defineElement(colSchema);
     }
   }
 
@@ -60,17 +90,23 @@ public class BuildFromSchema {
    */
 
   public void buildTuple(TupleWriter writer, TupleMetadata schema) {
-    ParentShim tupleShim = new TupleShim(writer);
+    final ParentShim tupleShim = new TupleShim(writer);
     for (int i = 0; i < schema.size(); i++) {
-      ColumnMetadata colSchema = schema.metadata(i);
+      final ColumnMetadata colSchema = schema.metadata(i);
       buildColumn(tupleShim, colSchema);
     }
   }
 
   private void buildColumn(ParentShim parent, ColumnMetadata colSchema) {
 
-    if (colSchema.isMap()) {
+    if (colSchema.structureType() == StructureType.MULTI_ARRAY) {
+      buildRepeatedList(parent, colSchema);
+    } else if (colSchema.isMap()) {
       buildMap(parent, colSchema);
+    } else if (isSingleList(colSchema)) {
+      buildSingleList(parent, colSchema);
+    } else if (colSchema.isVariant()) {
+      buildVariant(parent, colSchema);
     } else {
       buildPrimitive(parent, colSchema);
     }
@@ -85,7 +121,7 @@ public class BuildFromSchema {
   }
 
   private void buildMap(ParentShim parent, ColumnMetadata colSchema) {
-    ObjectWriter colWriter = parent.add(colSchema.cloneEmpty());
+    final ObjectWriter colWriter = parent.add(colSchema.cloneEmpty());
     expandMap(colWriter, colSchema);
   }
 
@@ -94,6 +130,69 @@ public class BuildFromSchema {
       buildTuple(colWriter.array().tuple(), colSchema.mapSchema());
     } else {
       buildTuple(colWriter.tuple(), colSchema.mapSchema());
+    }
+  }
+
+  private void buildVariant(ParentShim parent, ColumnMetadata colSchema) {
+    final ObjectWriter colWriter = parent.add(colSchema.cloneEmpty());
+    expandVariant(colWriter, colSchema);
+  }
+
+  private void expandVariant(ObjectWriter colWriter, ColumnMetadata colSchema) {
+    if (colSchema.isArray()) {
+      buildUnion(colWriter.array().variant(), colSchema.variantSchema());
+    } else {
+      buildUnion(colWriter.variant(), colSchema.variantSchema());
+    }
+  }
+
+  public void buildUnion(VariantWriter writer, VariantMetadata schema) {
+    final UnionShim unionShim = new UnionShim(writer);
+    for (final ColumnMetadata member : schema.members()) {
+      buildColumn(unionShim, member);
+    }
+  }
+
+  private void buildSingleList(ParentShim parent, ColumnMetadata colSchema) {
+    final ColumnMetadata seed = colSchema.cloneEmpty();
+    final ColumnMetadata subtype = colSchema.variantSchema().listSubtype();
+    seed.variantSchema().addType(subtype.cloneEmpty());
+    seed.variantSchema().becomeSimple();
+    final ObjectWriter listWriter = parent.add(seed);
+    expandColumn(listWriter, subtype);
+  }
+
+  /**
+   * Expand a repeated list. The list may be multi-dimensional, meaning that
+   * it may have may layers of other repeated lists before we get to the element
+   * (inner-most) array.
+   *
+   * @param writer tuple writer for the tuple that holds the array
+   * @param colSchema schema definition of the array
+   */
+
+  private void buildRepeatedList(ParentShim parent, ColumnMetadata colSchema) {
+    final ColumnMetadata seed = colSchema.cloneEmpty();
+    final RepeatedListWriter listWriter = (RepeatedListWriter) parent.add(seed).array();
+    final ColumnMetadata elements = colSchema.childSchema();
+    if (elements != null) {
+      final RepeatedListShim listShim = new RepeatedListShim(listWriter);
+      buildColumn(listShim, elements);
+    }
+  }
+
+  private void expandColumn(ObjectWriter colWriter, ColumnMetadata colSchema) {
+
+    if (colSchema.structureType() == StructureType.MULTI_ARRAY) {
+      assert false;
+    } else if (colSchema.isMap()) {
+      expandMap(colWriter, colSchema);
+    } else if (isSingleList(colSchema)) {
+      assert false;
+    } else if (colSchema.isVariant()) {
+      expandVariant(colWriter, colSchema);
+    } else {
+      // Nothing to expand for primitives
     }
   }
 }
