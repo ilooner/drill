@@ -165,8 +165,7 @@ public class TestResultSetLoaderUnions extends SubOperatorTest {
     writer
       .addRow(3, null)
       .addRow(4, mapValue(40, null))
-      .addRow(5, "last")
-      ;
+      .addRow(5, "last");
 
     // Verify the values.
     // (Relies on the row set level union tests having passed.)
@@ -344,8 +343,7 @@ public class TestResultSetLoaderUnions extends SubOperatorTest {
     writer
       .addRow(1, strArray("fred", "barney"))
       .addRow(2, null)
-      .addRow(3, strArray("wilma", "betty", "pebbles"))
-      ;
+      .addRow(3, strArray("wilma", "betty", "pebbles"));
 
     // Verify
 
@@ -392,8 +390,7 @@ public class TestResultSetLoaderUnions extends SubOperatorTest {
     writer
       .addRow(1, strArray("fred", "barney"))
       .addRow(2, null)
-      .addRow(3, strArray("wilma", "betty", "pebbles"))
-      ;
+      .addRow(3, strArray("wilma", "betty", "pebbles"));
 
     // Verify
 
@@ -514,8 +511,7 @@ public class TestResultSetLoaderUnions extends SubOperatorTest {
     writer
       .addRow(1, null)
       .addRow(2, variantArray())
-      .addRow(3, variantArray(null, null))
-      ;
+      .addRow(3, variantArray(null, null));
 
     // Add a String. Now we can create a list of strings and/or nulls.
 
