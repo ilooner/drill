@@ -286,12 +286,13 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
       state = BatchState.BUILD_SCHEMA;
 
       debugInfo.setJoinType(joinType);
-      debugInfo.setLeftSchema(probeSchema);
       debugInfo.setLeftOutcomeSchema(leftUpstream);
 
       if (leftUpstream == OK_NEW_SCHEMA) {
         probeSchema = left.getSchema();
       }
+
+      debugInfo.setLeftSchema(probeSchema);
 
       if (rightUpstream == OK_NEW_SCHEMA) {
         buildSchema = right.getSchema();
