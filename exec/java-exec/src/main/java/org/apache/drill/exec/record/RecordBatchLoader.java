@@ -280,7 +280,7 @@ public class RecordBatchLoader implements VectorAccessible, Iterable<VectorWrapp
    * Removes an data from the loader, but maintains the schema and empty vectors.
    */
   public void zero() {
-    container.clear();
+    container.zeroVectors();
     resetRecordCount();
   }
 

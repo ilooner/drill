@@ -618,8 +618,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
 
       return IterOutcome.NONE;
     } catch(IndexOutOfBoundsException | NullPointerException e) {
-      e.printStackTrace();
-      throw new IndexOutOfBoundsException(debugInfo.toString());
+      throw new RuntimeException(debugInfo.toString(), e);
     } catch (SchemaChangeException e) {
       context.getExecutorState().fail(e);
       killIncoming(false);
