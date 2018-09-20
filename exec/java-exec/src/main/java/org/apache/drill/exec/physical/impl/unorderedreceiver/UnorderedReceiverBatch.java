@@ -174,7 +174,7 @@ public class UnorderedReceiverBatch implements CloseableRecordBatch {
       first = false;
 
       if (batch == null) {
-        batchLoader.zero();
+        batchLoader.clear();
         if (!context.getExecutorState().shouldContinue()) {
           return IterOutcome.STOP;
         }

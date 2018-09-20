@@ -23,6 +23,7 @@ import java.util.Set;
 
 import javax.inject.Named;
 
+import org.apache.drill.exec.record.VectorAccessible;
 import org.apache.drill.shaded.guava.com.google.common.collect.Sets;
 import org.apache.drill.common.types.TypeProtos.MinorType;
 import org.apache.drill.common.types.Types;
@@ -93,7 +94,7 @@ public abstract class HashTableTemplate implements HashTable {
   private VectorContainer incomingBuild;
 
   // The incoming probe side record batch (may be null)
-  private RecordBatch incomingProbe;
+  private VectorAccessible incomingProbe;
 
   // The outgoing record batch
   private RecordBatch outgoing;
@@ -403,7 +404,7 @@ public abstract class HashTableTemplate implements HashTable {
     @RuntimeOverridden
     protected void setupInterior(
         @Named("incomingBuild") VectorContainer incomingBuild,
-        @Named("incomingProbe") RecordBatch incomingProbe,
+        @Named("incomingProbe") VectorAccessible incomingProbe,
         @Named("outgoing") RecordBatch outgoing,
         @Named("htContainer") VectorContainer htContainer) throws SchemaChangeException {
     }
@@ -862,7 +863,7 @@ public abstract class HashTableTemplate implements HashTable {
     startIndices = allocMetadataVector(originalTableSize, EMPTY_SLOT);
   }
 
-  public void updateIncoming(VectorContainer newIncoming, RecordBatch newIncomingProbe) {
+  public void updateIncoming(VectorContainer newIncoming, VectorAccessible newIncomingProbe) {
     incomingBuild = newIncoming;
     incomingProbe = newIncomingProbe;
     // reset();
@@ -890,7 +891,7 @@ public abstract class HashTableTemplate implements HashTable {
   }
 
   // These methods will be code-generated in the context of the outer class
-  protected abstract void doSetup(@Named("incomingBuild") VectorContainer incomingBuild, @Named("incomingProbe") RecordBatch incomingProbe) throws SchemaChangeException;
+  protected abstract void doSetup(@Named("incomingBuild") VectorContainer incomingBuild, @Named("incomingProbe") VectorAccessible incomingProbe) throws SchemaChangeException;
 
   protected abstract int getHashBuild(@Named("incomingRowIdx") int incomingRowIdx, @Named("seedValue") int seedValue) throws SchemaChangeException;
 

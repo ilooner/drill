@@ -1000,7 +1000,7 @@ public class HashJoinBatch extends AbstractBinaryRecordBatch<HashJoinPOP> {
           partn.spillThisPartition();
         } else {
           // Only build hash tables for partitions that are not spilled
-          partn.buildContainersHashTableAndHelper();
+          partn.buildContainersHashTableAndHelper(probeSideIsEmpty.booleanValue());
         }
       } catch (OutOfMemoryException e) {
         final String message = "Failed building hash table on partition " + index + ":\n"

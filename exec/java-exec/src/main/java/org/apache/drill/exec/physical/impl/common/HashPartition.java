@@ -490,7 +490,7 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
    * This method should only be called after all the build side records
    * have been consumed.
    */
-  public void buildContainersHashTableAndHelper() throws SchemaChangeException {
+  public void buildContainersHashTableAndHelper(boolean isProbeEmpty) throws SchemaChangeException {
     if ( isSpilled ) { return; } // no building for spilled partitions
     containers = new ArrayList<>();
     hashTable.updateInitialCapacity((int) getNumInMemoryRecords());
@@ -507,7 +507,11 @@ public class HashPartition implements HashJoinMemoryCalculator.PartitionStat {
       assert nextBatch != null;
       assert probeBatch != null;
 
-      hashTable.updateIncoming(nextBatch, probeBatch );
+      if (isProbeEmpty) {
+        hashTable.updateIncoming(nextBatch, new VectorContainer(allocator, probeBatch.getSchema()));
+      } else {
+        hashTable.updateIncoming(nextBatch, probeBatch);
+      }
 
       IntVector HV_vector = (IntVector) nextBatch.getLast();
 

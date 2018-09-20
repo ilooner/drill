@@ -21,6 +21,7 @@ import org.apache.drill.exec.compile.TemplateClassDefinition;
 import org.apache.drill.exec.exception.SchemaChangeException;
 import org.apache.drill.exec.memory.BufferAllocator;
 import org.apache.drill.exec.record.RecordBatch;
+import org.apache.drill.exec.record.VectorAccessible;
 import org.apache.drill.exec.record.VectorContainer;
 import org.apache.drill.common.exceptions.RetryAfterSpillException;
 
@@ -119,7 +120,7 @@ public interface HashTable {
    * @param newIncoming The new build side batch.
    * @param newIncomingProbe The new probe side batch.
    */
-  void updateIncoming(VectorContainer newIncoming, RecordBatch newIncomingProbe);
+  void updateIncoming(VectorContainer newIncoming, VectorAccessible newIncomingProbe);
 
   /**
    * Clears all the memory used by the {@link HashTable} and re-initializes it.
